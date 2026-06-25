@@ -1,0 +1,20 @@
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: kali-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/kali-dev-password
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "kali-dev-password", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  neo4j_data:
