@@ -9,7 +9,7 @@ export default tseslint.config(
   { ignores: ["dist", ".output", ".vinxi"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ["**/*.{ts,tsx}"],
+    files: ["frontend/**/*.{ts,tsx}"],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,

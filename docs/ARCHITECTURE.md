@@ -1,12 +1,14 @@
 # KaLI — Graph-Native Architecture
 
+> **Note:** This document is the high-level architecture reference. For setup and folder layouts, see [README.md](../README.md), [frontend/README.md](../frontend/README.md), and [backend/README.md](../backend/README.md).
+
 KaLI evaluates **Network Resilience**, not isolated spreadsheet rows. The platform is built around **Neo4j** as the single source of truth for farmers, cooperatives, chamas, climate zones, and the relationships between them.
 
 ## System overview
 
 ```
 ┌─────────────────────┐     ┌──────────────────────────┐     ┌─────────────────────┐
-│  Farmer USSD/SMS    │     │   api-core (Express)     │     │  Officer Web App    │
+│  Farmer USSD/SMS    │     │   backend (Express)      │     │  Officer Web App    │
 │  /farmer simulator  │────►│   neo4j-driver + Cypher  │◄────│  TanStack Start     │
 │  POST /ussd/ussd    │     │   scoringEngine.js       │     │  /dashboard         │
 └─────────────────────┘     └────────────┬─────────────┘     │  /scorecard/:id     │
@@ -42,7 +44,7 @@ KaLI evaluates **Network Resilience**, not isolated spreadsheet rows. The platfo
 
 ## Scoring layers (Cypher traversal)
 
-One query in `api-core/src/services/scoringEngine.js` walks:
+One query in `backend/src/services/scoringEngine.js` walks:
 
 ```cypher
 MATCH (f:Farmer) WHERE f.id = $lookup OR f.national_id = $lookup
@@ -70,42 +72,6 @@ Base URL: `http://localhost:4000` (see `.env.example`)
 | `POST` | `/api/farmers/:id/decision` | Commit stance + SMS |
 | `GET` | `/api/pipeline` | Logs / sync console |
 | `POST` | `/ussd/ussd` | Telco gateway (plain text) |
-
-## Local development
-
-```bash
-# 1. Start Neo4j
-npm run neo4j:up
-
-# 2. Install & seed api-core
-cd api-core && npm install && npm run seed
-
-# 3. Start graph API (terminal 1)
-npm run dev:api
-
-# 4. Start frontend (terminal 2)
-npm run dev
-```
-
-Browse Neo4j Browser at [http://localhost:7474](http://localhost:7474) (user `neo4j`, password `kali-dev-password`).
-
-## Directory layout
-
-```
-kaliapp/
-├── api-core/                 # Graph-native Express service
-│   ├── server.js
-│   ├── scripts/seed.js
-│   └── src/
-│       ├── config/neo4j.js
-│       ├── services/scoringEngine.js
-│       ├── controllers/
-│       └── routes/
-├── database/seed.cypher      # Graph seed (farmers, zones, chamas)
-├── src/                      # Officer + farmer UI (TanStack Start)
-│   └── lib/api-core.ts       # Frontend client
-└── docker-compose.neo4j.yml
-```
 
 ## Climate contagion demo
 

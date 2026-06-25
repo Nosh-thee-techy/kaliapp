@@ -67,7 +67,7 @@ export async function healthCheck(_req, res) {
   try {
     const { verifyConnectivity } = await import("../config/neo4j.js");
     await verifyConnectivity();
-    return res.json({ status: "ok", engine: "neo4j", service: "kali-api-core" });
+    return res.json({ status: "ok", engine: "neo4j", service: "kali-backend" });
   } catch (error) {
     return res.status(503).json({ status: "degraded", error: error.message });
   }

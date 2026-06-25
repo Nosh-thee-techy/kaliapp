@@ -31,14 +31,14 @@ app.get("/", (_req, res) => {
 async function start() {
   try {
     await verifyConnectivity();
-    console.log("[api-core] Neo4j connection verified");
+    console.log("[backend] Neo4j connection verified");
   } catch (err) {
-    console.warn("[api-core] Neo4j not reachable — start Neo4j and run `npm run seed` in api-core/");
+    console.warn("[backend] Neo4j not reachable — start Neo4j and run `npm run seed` in backend/");
     console.warn(err.message);
   }
 
   app.listen(PORT, () => {
-    console.log(`[api-core] listening on http://localhost:${PORT}`);
+    console.log(`[backend] listening on http://localhost:${PORT}`);
   });
 }
 

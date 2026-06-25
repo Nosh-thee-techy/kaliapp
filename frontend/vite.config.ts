@@ -4,11 +4,16 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { nitro } from "nitro/vite";
+import { fileURLToPath } from "url";
+import path from "path";
+
+const root = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  root,
   plugins: [
     tailwindcss(),
-    tsconfigPaths(),
+    tsconfigPaths({ projects: [path.join(root, "tsconfig.json")] }),
     tanstackStart({
       server: { entry: "server" },
     }),

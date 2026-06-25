@@ -104,7 +104,7 @@ function GraphScorecardView({
       );
       navigate({ to: "/dashboard" });
     } catch {
-      alert("Neo4j write failed. Is api-core running?");
+      alert("Neo4j write failed. Is the backend API running?");
     } finally {
       setSubmitting(null);
     }
@@ -291,7 +291,7 @@ function MockScorecardFallback({ farmer }: { farmer: import("@/lib/mock-data").F
     <main className="mx-auto max-w-3xl px-4 py-16 text-center">
       <h1 className="font-display text-2xl font-semibold">Offline mock mode</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Neo4j api-core unavailable. Start Neo4j and run <code className="text-xs">cd api-core && npm run seed</code>.
+        Neo4j backend unavailable. Start Neo4j and run <code className="text-xs">cd backend && npm run seed</code>.
       </p>
       <p className="mt-4 text-sm text-muted-foreground">Farmer: {farmer.name} ({farmer.id})</p>
       <Link to="/dashboard" className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">

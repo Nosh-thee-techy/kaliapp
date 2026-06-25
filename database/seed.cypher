@@ -1,6 +1,6 @@
 // =============================================================================
 // KaLI Neo4j Graph Seed — Network Resilience Truth Model
-// Run: cd api-core && npm run seed
+// Run: cd backend && npm run seed
 // =============================================================================
 
 // --- Constraints & indexes ---
