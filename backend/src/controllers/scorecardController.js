@@ -8,6 +8,7 @@ import {
   getPortfolioStats,
   getPublicStats as fetchPublicStats,
 } from "../services/farmerService.js";
+import { syncClimatePipeline } from "../services/climatePipeline.js";
 
 export async function getScorecard(req, res) {
   try {
@@ -69,6 +70,17 @@ export async function getPipeline(req, res) {
     return res.json({ runs, fetchedAt: new Date().toISOString() });
   } catch (error) {
     console.error("[pipeline]", error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function postPipelineSync(_req, res) {
+  try {
+    const result = await syncClimatePipeline();
+    const runs = await listPipelineRuns();
+    return res.json({ ok: true, ...result, runs });
+  } catch (error) {
+    console.error("[pipeline/sync]", error);
     return res.status(500).json({ error: error.message });
   }
 }

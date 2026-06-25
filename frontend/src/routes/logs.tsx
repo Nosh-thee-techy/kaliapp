@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { auditLog, pipelineRuns, formatRelative, type PipelineRun } from "@/lib/mock-data";
-import { fetchAuditLog, fetchPipeline } from "@/lib/api-core";
+import { fetchAuditLog, fetchPipeline, syncClimatePipeline } from "@/lib/api-core";
 import type { AuditEntry } from "@/lib/api-core";
 import { requireOfficerSession } from "@/lib/require-officer";
+import { toast } from "sonner";
+import { CloudRain } from "lucide-react";
 
 export const Route = createFileRoute("/logs")({
   beforeLoad: requireOfficerSession,
@@ -22,6 +24,7 @@ function LogsPage() {
   const [pipelineSynced, setPipelineSynced] = useState<string | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditLive, setAuditLive] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +68,24 @@ function LogsPage() {
     };
   }, []);
 
+  async function runClimateSync() {
+    setSyncing(true);
+    try {
+      const result = await syncClimatePipeline();
+      setPipeline(result.runs);
+      setPipelineSynced(result.syncedAt);
+      setPipelineLive(true);
+      window.dispatchEvent(new CustomEvent("kali-pipeline-synced"));
+      toast.success("Climate pipeline synced", {
+        description: `${result.zonesUpdated} zones updated · ${result.farmersPromoted} farmers promoted`,
+      });
+    } catch {
+      toast.error("Climate sync failed", { description: "Is the backend running?" });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const toneClass = (s: PipelineRun["status"]) =>
     s === "ok"
       ? "bg-success/10 text-success"
@@ -83,12 +104,23 @@ function LogsPage() {
       </p>
 
       <section className="mt-8">
-        <div className="flex items-baseline justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-lg font-semibold text-foreground">Pipeline status matrix</h2>
-          <span className="text-xs text-muted-foreground">
-            {pipelineLive ? "Neo4j · " : "Mock · "}
-            {pipelineSynced ? `synced ${formatRelative(pipelineSynced)}` : "fetching…"}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {pipelineLive ? "Neo4j · " : "Mock · "}
+              {pipelineSynced ? `synced ${formatRelative(pipelineSynced)}` : "fetching…"}
+            </span>
+            <button
+              type="button"
+              onClick={runClimateSync}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            >
+              <CloudRain className="h-3.5 w-3.5" />
+              {syncing ? "Syncing…" : "Run CHIRPS / ICPAC sync"}
+            </button>
+          </div>
         </div>
         <div className="mt-3 overflow-hidden rounded-lg border border-border bg-card">
           <table className="w-full text-sm">

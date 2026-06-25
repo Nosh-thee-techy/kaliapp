@@ -4,6 +4,7 @@ import {
   getFarmers,
   postDecision,
   getPipeline,
+  postPipelineSync,
   getAudit,
   getSms,
   getPortfolio,
@@ -29,6 +30,7 @@ router.get("/stats/public", getPublicStats);
 router.get("/sms", getSms);
 
 router.get("/pipeline", getPipeline);
+router.post("/pipeline/sync", postPipelineSync);
 router.get("/audit", getAudit);
 router.get("/stats/portfolio", getPortfolio);
 router.get("/farmers", getFarmers);

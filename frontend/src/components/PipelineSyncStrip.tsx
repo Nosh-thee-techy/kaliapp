@@ -36,9 +36,19 @@ export function PipelineSyncStrip() {
   const [runs, setRuns] = useState<PipelineRun[]>(mockPipeline);
 
   useEffect(() => {
-    fetchPipeline()
-      .then((d) => setRuns(d.runs))
-      .catch(() => setRuns(mockPipeline));
+    const load = () =>
+      fetchPipeline()
+        .then((d) => setRuns(d.runs))
+        .catch(() => setRuns(mockPipeline));
+
+    load();
+    const id = setInterval(load, 30000);
+    const onSync = () => load();
+    window.addEventListener("kali-pipeline-synced", onSync);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("kali-pipeline-synced", onSync);
+    };
   }, []);
 
   const chirps = findRun(runs, "CHIRPS");

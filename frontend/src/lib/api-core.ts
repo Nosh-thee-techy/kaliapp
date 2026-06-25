@@ -189,6 +189,16 @@ export async function fetchPipeline(): Promise<{ runs: PipelineRun[]; fetchedAt:
   return graphFetch("/api/pipeline");
 }
 
+export async function syncClimatePipeline(): Promise<{
+  ok: boolean;
+  zonesUpdated: number;
+  farmersPromoted: number;
+  syncedAt: string;
+  runs: PipelineRun[];
+}> {
+  return graphFetch("/api/pipeline/sync", { method: "POST" });
+}
+
 export async function fetchAuditLog(params?: {
   limit?: number;
   farmerId?: string;
