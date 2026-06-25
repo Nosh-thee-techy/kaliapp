@@ -1,10 +1,18 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { Sprout, Eye, EyeOff, ArrowRight, Globe } from "lucide-react";
 import farmerImg from "@/assets/farmer.jpg";
 import { useI18n, LANGS, type Lang } from "@/lib/i18n";
+import { getOfficer, setOfficer } from "@/lib/officer-session";
+import { loginOfficer, registerOfficer } from "@/lib/api-core";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined" && getOfficer()?.token) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Sign in — KaLI" },
@@ -20,11 +28,35 @@ function AuthPage() {
   const [mode, setMode] = useState<"signin" | "register">("signin");
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("Jane Mwangi");
+  const [email, setEmail] = useState("jane.mwangi@kali.co.ke");
+  const [password, setPassword] = useState("KaliBranch2026!");
+  const [error, setError] = useState<string | null>(null);
 
-  function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => navigate({ to: "/dashboard" }), 600);
+    setError(null);
+    try {
+      const result =
+        mode === "signin"
+          ? await loginOfficer(email, password)
+          : await registerOfficer({ name, email, password, branch: "Naivasha" });
+      setOfficer({
+        name: result.officer.name,
+        email: result.officer.email,
+        branch: result.officer.branch,
+        token: result.token,
+      });
+      toast.success(mode === "signin" ? "Signed in" : "Account created");
+      navigate({ to: "/dashboard" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Sign-in failed";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -68,14 +100,24 @@ function AuthPage() {
             </p>
 
             <form onSubmit={onSubmit} className="mt-8 space-y-4">
-              {mode === "register" && <Field label="Name" placeholder="Jane Mwangi" />}
-              <Field label={t("auth.email")} type="email" placeholder="jane.mwangi@kali.co.ke" />
+              {mode === "register" && (
+                <Field label="Name" placeholder="Jane Mwangi" value={name} onChange={(e) => setName(e.target.value)} />
+              )}
+              <Field
+                label={t("auth.email")}
+                type="email"
+                placeholder="jane.mwangi@kali.co.ke"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
               <div>
                 <label className="text-xs font-medium text-muted-foreground">{t("auth.password")}</label>
                 <div className="relative mt-1.5">
                   <input
                     type={show ? "text" : "password"}
                     placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className="w-full rounded-full border border-input bg-card px-5 py-3 pr-12 text-sm placeholder:text-muted-foreground/60 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
                   />
                   <button
@@ -94,6 +136,12 @@ function AuthPage() {
                   </div>
                 )}
               </div>
+
+              {error && (
+                <p className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+                  {error}
+                </p>
+              )}
 
               <button
                 type="submit"
