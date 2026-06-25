@@ -1,0 +1,223 @@
+import { getDriver } from "../config/neo4j.js";
+
+export async function listFarmers({ status, segment } = {}) {
+  const session = getDriver().session();
+  const where = [];
+  const params = {};
+
+  if (status && status !== "all") {
+    where.push("f.status = $status");
+    params.status = status;
+  }
+  if (segment && segment !== "All") {
+    where.push("f.demographic_group = $segment");
+    params.segment = segment;
+  }
+
+  const cypher = `
+    MATCH (f:Farmer)
+    OPTIONAL MATCH (f)-[:DELIVERS_TO]->(coop:Cooperative)
+    OPTIONAL MATCH (coop)-[:OPERATES_IN]->(zone:ClimateZone)
+  ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+    RETURN f, coop, zone
+    ORDER BY f.submitted_iso DESC
+  `;
+
+  try {
+    const result = await session.run(cypher, params);
+    return result.records.map((r) => {
+      const f = r.get("f").properties;
+      const coop = r.get("coop")?.properties;
+      const zone = r.get("zone")?.properties;
+      return {
+        id: f.id,
+        nationalId: f.national_id,
+        name: f.name,
+        phone: f.phone_number,
+        vulnerabilityTag: f.vulnerability_tag,
+        segment: f.demographic_group,
+        cooperative: coop?.name || "",
+        coopCode: coop?.id || "",
+        zoneCode: zone?.id || "",
+        zoneName: zone?.name || "",
+        requestedKes: toNum(f.requested_kes),
+        acreage: toNum(f.acreage),
+        status: f.status || "ready_for_review",
+        hasLandOwnership: f.has_land_ownership ? 1 : 0,
+        leaseDurationMonths: toNum(f.lease_duration_months),
+        cooperativeDeliveryYears: toNum(f.cooperative_delivery_years),
+        chamaMonthsConsistent: toNum(f.chama_months_consistent),
+        mobileMoneyInflowsKes: toNum(f.mobile_money_inflows_kes),
+        harvestMonth: f.harvest_month,
+        cropType: f.crop_type,
+        registeredVia: f.registered_via,
+        submittedIso: f.submitted_iso,
+      };
+    });
+  } finally {
+    await session.close();
+  }
+}
+
+export async function recordDecision(lookup, { decision, stance, notes, officer }) {
+  const session = getDriver().session();
+  const statusMap = {
+    Approved: "disbursed",
+    Referred: "escalated",
+    Declined: "escalated",
+  };
+  const newStatus = statusMap[decision] || "ready_for_review";
+
+  const cypher = `
+    MATCH (f:Farmer)
+    WHERE f.id = $lookup OR f.national_id = $lookup
+    SET f.status = $status,
+        f.last_decision = $decision,
+        f.last_stance = $stance,
+        f.last_decision_notes = $notes,
+        f.last_decision_iso = datetime()
+    WITH f
+    CREATE (a:AuditEntry {
+      id: randomUUID(),
+      decision: $decision,
+      stance: $stance,
+      notes: $notes,
+      officer: $officer,
+      timestamp_iso: toString(datetime())
+    })
+    CREATE (f)-[:DECIDED {at: datetime()}]->(a)
+    WITH f, a
+    CREATE (sms:SmsMessage {
+      id: randomUUID(),
+      to: f.phone_number,
+      body: $smsBody,
+      category: "decision",
+      sent_iso: toString(datetime())
+    })
+    CREATE (f)-[:NOTIFIED]->(sms)
+    RETURN f, a, sms
+  `;
+
+  const scoreHint = decision === "Approved" ? "Approved" : decision;
+  const smsBody = `KaLI Rating update. ${scoreHint}. ${notes ? notes.slice(0, 80) : "Contact your branch officer for details."}`;
+
+  try {
+    const result = await session.run(cypher, {
+      lookup,
+      status: newStatus,
+      decision,
+      stance,
+      notes: notes || "",
+      officer: officer || "Branch Officer",
+      smsBody,
+    });
+    if (result.records.length === 0) return null;
+    const f = result.records[0].get("f").properties;
+    const sms = result.records[0].get("sms").properties;
+    return { farmer: f, sms };
+  } finally {
+    await session.close();
+  }
+}
+
+export async function registerFarmerFromUssd({
+  nationalId,
+  phoneNumber,
+  coopCode,
+  acreage,
+  cropType,
+  requestedKes,
+}) {
+  const session = getDriver().session();
+  const kaliId = `F-${Date.now().toString().slice(-4)}`;
+
+  const cypher = `
+    MERGE (f:Farmer {national_id: $nationalId})
+    ON CREATE SET
+      f.id = $kaliId,
+      f.phone_number = $phoneNumber,
+      f.name = "Pending verification",
+      f.demographic_group = "General",
+      f.vulnerability_tag = "Smallholder",
+      f.has_land_ownership = false,
+      f.lease_duration_months = 0,
+      f.chama_months_consistent = 0,
+      f.mobile_money_inflows_kes = 0,
+      f.status = "awaiting_climate",
+      f.submitted_iso = toString(datetime()),
+      f.registered_via = "USSD"
+    SET f.requested_kes = coalesce($requestedKes, f.requested_kes, 35000),
+        f.crop_type = coalesce($cropType, f.crop_type, "Maize"),
+        f.acreage = coalesce($acreage, f.acreage, 1),
+        f.harvest_month = coalesce(f.harvest_month, "TBD")
+    WITH f
+    OPTIONAL MATCH (coop:Cooperative {id: $coopCode})
+    FOREACH (_ IN CASE WHEN coop IS NOT NULL THEN [1] ELSE [] END |
+      MERGE (f)-[d:DELIVERS_TO]->(coop)
+      ON CREATE SET d.delivery_years = 0, d.volume_tons = 0
+    )
+    RETURN f
+  `;
+
+  try {
+    const result = await session.run(cypher, {
+      nationalId,
+      kaliId,
+      phoneNumber,
+      coopCode: coopCode || "COOP-NSH-01",
+      acreage: acreage ? Number(acreage) : 1,
+      cropType: cropType || "Maize",
+      requestedKes: requestedKes ? Number(requestedKes) : 35000,
+    });
+    if (result.records.length === 0) return null;
+    return result.records[0].get("f").properties;
+  } finally {
+    await session.close();
+  }
+}
+
+export async function findFarmerByPhone(phoneNumber) {
+  const session = getDriver().session();
+  const normalized = phoneNumber.replace(/\s/g, "");
+  try {
+    const result = await session.run(
+      `
+      MATCH (f:Farmer)
+      WHERE replace(f.phone_number, ' ', '') = $phone
+         OR replace(f.phone_number, ' ', '') ENDS WITH right($phone, 9)
+      RETURN f
+      LIMIT 1
+    `,
+      { phone: normalized },
+    );
+    if (result.records.length === 0) return null;
+    return result.records[0].get("f").properties;
+  } finally {
+    await session.close();
+  }
+}
+
+export async function listPipelineRuns() {
+  const session = getDriver().session();
+  try {
+    const result = await session.run(
+      `MATCH (p:PipelineRun) RETURN p ORDER BY p.last_run_iso DESC`,
+    );
+    return result.records.map((r) => {
+      const p = r.get("p").properties;
+      return {
+        source: p.source,
+        lastRunIso: p.last_run_iso,
+        status: p.status,
+        message: p.message,
+      };
+    });
+  } finally {
+    await session.close();
+  }
+}
+
+function toNum(v) {
+  const n = Number(v);
+  return Number.isNaN(n) ? 0 : n;
+}
