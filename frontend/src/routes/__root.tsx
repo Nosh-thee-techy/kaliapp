@@ -8,7 +8,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Sprout, Home, Smartphone, Activity, Settings, LogOut, Bell, Search, Globe } from "lucide-react";
 
 import "@fontsource/inter/400.css";
@@ -19,27 +19,15 @@ import "@fontsource/fraunces/600.css";
 
 import appCss from "../styles.css?url";
 import { I18nProvider, useI18n, LANGS, type Lang } from "../lib/i18n";
+import { Toaster } from "../components/ui/sonner";
+import { fetchGraphHealth } from "../lib/api-core";
+import { getOfficer, getOfficerInitials, clearOfficer } from "../lib/officer-session";
+import { SadnessErrorPage } from "../components/SadnessErrorPage";
+import { OfficerChromeProvider, useOfficerChrome } from "../lib/officer-chrome";
+import { PipelineSyncStrip } from "../components/PipelineSyncStrip";
 
 function NotFoundComponent() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="font-display text-7xl font-semibold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist.
-        </p>
-        <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Go home
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
+  return <SadnessErrorPage variant="404" />;
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
@@ -47,31 +35,14 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Something went wrong
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">Try again or head back home.</p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button
-            onClick={() => {
-              router.invalidate();
-              reset();
-            }}
-            className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Try again
-          </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-full border border-input bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          >
-            Home
-          </a>
-        </div>
-      </div>
-    </div>
+    <SadnessErrorPage
+      variant="error"
+      error={error}
+      onRetry={() => {
+        router.invalidate();
+        reset();
+      }}
+    />
   );
 }
 
@@ -172,6 +143,7 @@ function Sidebar() {
       </button>
       <Link
         to="/auth"
+        onClick={() => clearOfficer()}
         className="flex h-12 w-12 items-center justify-center rounded-2xl text-primary-foreground/50 hover:bg-white/10 hover:text-primary-foreground"
       >
         <LogOut className="h-5 w-5" />
@@ -182,27 +154,54 @@ function Sidebar() {
 
 function TopBar() {
   const { t } = useI18n();
+  const [graphOk, setGraphOk] = useState<boolean | null>(null);
+  const officer = getOfficer();
+  const { searchQuery, setSearchQuery, searchInputRef } = useOfficerChrome();
+
+  useEffect(() => {
+    fetchGraphHealth().then(setGraphOk);
+    const id = setInterval(() => fetchGraphHealth().then(setGraphOk), 15000);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <header className="sticky top-0 z-20 flex h-20 items-center gap-4 border-b border-border bg-background/85 px-6 backdrop-blur-md sm:px-8">
       <div className="relative hidden flex-1 max-w-md md:block">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
-          placeholder={t("dashboard.search")}
+          ref={searchInputRef}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder={`${t("dashboard.search")} (/)`}
           className="w-full rounded-full border border-border bg-card py-2.5 pl-11 pr-4 text-sm shadow-card focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
         />
       </div>
       <div className="ml-auto flex items-center gap-3">
+        <PipelineSyncStrip />
         <LanguageSwitch />
-        <span className="hidden items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-xs text-success-foreground md:inline-flex">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-          {t("common.synced")}
+        <span
+          className={`hidden items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs md:inline-flex ${
+            graphOk
+              ? "border-success/30 bg-success/10 text-success-foreground"
+              : graphOk === false
+                ? "border-warning/30 bg-warning/15 text-warning-foreground"
+                : "border-border bg-card text-muted-foreground"
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${graphOk ? "animate-pulse bg-success" : graphOk === false ? "bg-warning" : "bg-muted-foreground"}`}
+          />
+          {graphOk ? t("common.synced") : graphOk === false ? t("common.offline") : "…"}
         </span>
         <button className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-foreground hover:bg-secondary">
           <Bell className="h-4 w-4" />
           <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive" />
         </button>
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-glow text-sm font-semibold text-primary-foreground">
-          JM
+        <div
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-glow text-sm font-semibold text-primary-foreground"
+          title={officer?.name || "Officer"}
+        >
+          {getOfficerInitials(officer?.name)}
         </div>
       </div>
     </header>
@@ -217,18 +216,21 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
+        <Toaster richColors position="top-right" />
         {isChromeless ? (
           <div className="min-h-screen text-foreground">
             <Outlet />
           </div>
         ) : (
-          <div className="flex min-h-screen text-foreground">
-            <Sidebar />
-            <div className="flex-1 min-w-0">
-              <TopBar />
-              <Outlet />
+          <OfficerChromeProvider>
+            <div className="flex min-h-screen text-foreground">
+              <Sidebar />
+              <div className="flex-1 min-w-0">
+                <TopBar />
+                <Outlet />
+              </div>
             </div>
-          </div>
+          </OfficerChromeProvider>
         )}
       </I18nProvider>
     </QueryClientProvider>
