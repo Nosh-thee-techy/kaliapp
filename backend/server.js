@@ -20,10 +20,11 @@ app.get("/", (_req, res) => {
     service: "KaLI Graph-Native API Core",
     docs: {
       health: "GET /api/health",
-      farmers: "GET /api/farmers",
+      auth: "POST /api/auth/login | POST /api/auth/register | GET /api/auth/me",
+      farmers: "GET /api/farmers (Bearer JWT)",
       scorecard: "GET /api/scorecard/:id",
       decision: "POST /api/farmers/:id/decision",
-      ussd: "POST /ussd/ussd",
+      ussd: "POST /ussd/ussd | POST /ussd/callback (Africa's Talking)",
     },
   });
 });

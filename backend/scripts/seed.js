@@ -41,6 +41,23 @@ async function main() {
     const count = await session.run("MATCH (f:Farmer) RETURN count(f) AS n");
     const farmers = count.records[0].get("n").toNumber();
     console.log(`[seed] Done. ${farmers} Farmer nodes in graph.`);
+
+    const { seedOfficers } = await import("../src/services/authService.js");
+    await seedOfficers([
+      {
+        email: "jane.mwangi@kali.co.ke",
+        name: "Jane Mwangi",
+        branch: "Naivasha",
+        password: "KaliBranch2026!",
+      },
+      {
+        email: "j.mwangi@kali.co.ke",
+        name: "James Mwangi",
+        branch: "Naivasha",
+        password: "KaliBranch2026!",
+      },
+    ]);
+    console.log("[seed] 2 Officer accounts ready (see README for demo credentials).");
   } catch (err) {
     console.error("[seed] Failed:", err.message);
     process.exitCode = 1;
