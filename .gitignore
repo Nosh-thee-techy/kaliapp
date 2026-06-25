@@ -16,6 +16,11 @@ dist-ssr
 .nitro
 *.local
 
+# Environment (never commit real secrets — use .env.example as template)
+.env
+.env.*
+!.env.example
+
 # Root npm lockfile (frontend uses bun.lock; backend has its own)
 /package-lock.json
 
