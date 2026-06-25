@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Sprout, Smartphone, CloudRain, Scale, ShieldCheck, Sparkles, ArrowRight, Bug, Users, Banknote, Leaf } from "lucide-react";
 import { useEffect, useState } from "react";
-import { farmers, climateSignals } from "@/lib/mock-data";
+import { farmers as mockFarmers, climateSignals } from "@/lib/mock-data";
+import { fetchPublicStats } from "@/lib/api-core";
+import type { PublicStats } from "@/lib/api-core";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -44,10 +46,21 @@ const STEPS = [
 ];
 
 function LandingPage() {
-  const ready = farmers.filter((f) => f.status === "ready_for_review").length;
-  const advisories = Object.values(climateSignals).filter((c) => c.advisory).length;
-  const women = farmers.filter((f) => f.segment === "Women").length;
-  const youth = farmers.filter((f) => f.segment === "Youth").length;
+  const [stats, setStats] = useState<PublicStats | null>(null);
+  const [live, setLive] = useState(false);
+
+  useEffect(() => {
+    fetchPublicStats()
+      .then((s) => {
+        setStats(s);
+        setLive(true);
+      })
+      .catch(() => setLive(false));
+  }, []);
+
+  const ready = stats?.ready ?? mockFarmers.filter((f) => f.status === "ready_for_review").length;
+  const advisories = stats?.advisories ?? Object.values(climateSignals).filter((c) => c.advisory).length;
+  const womenYouth = stats?.womenYouth ?? mockFarmers.filter((f) => f.segment === "Women" || f.segment === "Youth").length;
 
   return (
     <main className="relative overflow-hidden">
@@ -112,7 +125,10 @@ function LandingPage() {
             <div className="mt-10 grid grid-cols-3 gap-4 border-t border-primary-foreground/15 pt-6 text-left">
               <MiniStat k={ready} label="Ready for review" />
               <MiniStat k={advisories} label="Climate advisories live" />
-              <MiniStat k={women + youth} label="Women + Youth in queue" />
+              <MiniStat k={womenYouth} label="Women + Youth in queue" />
+              {live && (
+                <p className="col-span-3 text-[10px] uppercase tracking-wider text-primary/80">Live Neo4j portfolio</p>
+              )}
             </div>
           </div>
 

@@ -8,7 +8,10 @@ import {
   STATUS_META,
   smsOutbox,
   auditLog,
+  type Farmer,
 } from "@/lib/mock-data";
+import { fetchGraphScorecard, fetchAuditLog, fetchSmsMessages } from "@/lib/api-core";
+import type { GraphScorecard, SmsMessage, AuditEntry } from "@/lib/api-core";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -44,82 +47,147 @@ import {
   FileText,
   MessageSquare,
 } from "lucide-react";
+import { requireOfficerSession } from "@/lib/require-officer";
+import { SadnessErrorPage } from "@/components/SadnessErrorPage";
 
 export const Route = createFileRoute("/farmers/$id")({
+  beforeLoad: requireOfficerSession,
   head: ({ params }) => ({
     meta: [
       { title: `Farmer ${params.id} — KaLI` },
       { name: "description", content: "Full farmer profile, repayment history, climate zone and SMS trail." },
     ],
   }),
-  loader: ({ params }) => {
-    const farmer = farmers.find((f) => f.id === params.id);
-    if (!farmer) throw notFound();
-    return { farmer };
+  loader: async ({ params }) => {
+    try {
+      const graph = await fetchGraphScorecard(params.id);
+      const [audit, sms] = await Promise.all([
+        fetchAuditLog({ farmerId: params.id, limit: 10 }),
+        fetchSmsMessages({ farmerId: params.id, limit: 10 }),
+      ]);
+      return { source: "graph" as const, graph, audit, sms };
+    } catch {
+      const farmer = farmers.find((f) => f.id === params.id || f.nationalId === params.id);
+      if (!farmer) throw notFound();
+      return { source: "mock" as const, farmer };
+    }
   },
   component: FarmerDetailPage,
   notFoundComponent: () => (
-    <main className="mx-auto max-w-3xl px-4 py-16 text-center">
-      <h1 className="font-display text-2xl font-semibold">Farmer not found</h1>
-      <Link to="/dashboard" className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">
-        Back to dashboard
-      </Link>
-    </main>
+    <SadnessErrorPage
+      variant="missing"
+      actions={
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center justify-center rounded-full bg-[#1a1a1a] px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+        >
+          Back to dashboard
+        </Link>
+      }
+    />
   ),
 });
 
-// Deterministic mock generators seeded on the farmer id
-function seed(s: string) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return () => {
-    h += 0x6d2b79f5;
-    let t = h;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+const MONTHS = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+
+function graphToFarmer(g: GraphScorecard): Farmer {
+  return {
+    id: g.id,
+    nationalId: g.national_id,
+    name: g.name,
+    phone: g.phone,
+    vulnerabilityTag: g.vulnerability_tag as Farmer["vulnerabilityTag"],
+    segment: g.segment as Farmer["segment"],
+    cooperative: g.cooperative,
+    coopCode: g.coop_code,
+    zoneCode: g.zone_code,
+    zoneName: g.zone_name,
+    requestedKes: g.requested_kes,
+    acreage: g.acreage,
+    status: g.status as Farmer["status"],
+    hasLandOwnership: g.has_land_ownership ? 1 : 0,
+    leaseDurationMonths: g.lease_duration_months,
+    cooperativeDeliveryYears: g.cooperative_delivery_years,
+    chamaMonthsConsistent: g.chama_months_consistent,
+    mobileMoneyInflowsKes: g.mobile_money_inflows_kes,
+    harvestMonth: g.harvest_month,
+    cropType: g.crop_type,
+    registeredVia: g.registered_via as Farmer["registeredVia"],
+    submittedIso: new Date().toISOString(),
   };
 }
 
-const MONTHS = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
-
 function FarmerDetailPage() {
-  const { farmer } = Route.useLoaderData() as { farmer: import("@/lib/mock-data").Farmer };
-  const climate = climateSignals[farmer.zoneCode];
-  const score = computeScore(farmer, climate);
-  const rand = seed(farmer.id);
+  const data = Route.useLoaderData();
+  const farmer = data.source === "graph" ? graphToFarmer(data.graph) : data.farmer;
+  const climate =
+    data.source === "graph"
+      ? {
+          zoneCode: data.graph.climate.zone_code,
+          spi: data.graph.climate.spi,
+          rainfallMmLast30d: data.graph.climate.rainfall_mm_last_30d,
+          pestProximityKm: data.graph.climate.pest_proximity_km,
+          advisory: data.graph.climate.advisory ?? undefined,
+          lastSyncIso: data.graph.climate.last_sync_iso || new Date().toISOString(),
+        }
+      : climateSignals[farmer.zoneCode];
+  const score =
+    data.source === "graph"
+      ? {
+          total: data.graph.total,
+          band: data.graph.band,
+          drivers: data.graph.drivers,
+          drags: data.graph.drags,
+          assetSubstituteApplied: data.graph.asset_substitute_applied,
+        }
+      : computeScore(farmer, climate);
+  const smsTrail: SmsMessage[] =
+    data.source === "graph"
+      ? data.sms
+      : smsOutbox.filter((s) => s.farmerId === farmer.id).map((s) => ({ ...s }));
+  const auditTrail: AuditEntry[] =
+    data.source === "graph"
+      ? data.audit
+      : auditLog
+          .filter((a) => a.farmerId === farmer.id)
+          .map((a) => ({
+            id: a.id,
+            farmerId: a.farmerId,
+            farmerName: a.farmerName,
+            officer: a.officer,
+            decision: a.decision,
+            notes: a.notes,
+            score: a.score,
+            timestampIso: a.timestampIso,
+          }));
 
-  const mpesa = MONTHS.map((m) => ({
+  const monthlyBase = farmer.mobileMoneyInflowsKes / 12;
+
+  const mpesa = MONTHS.map((m, i) => ({
     m,
-    inflow: Math.round(farmer.mobileMoneyInflowsKes / 12 * (0.6 + rand() * 0.9)),
-    outflow: Math.round(farmer.mobileMoneyInflowsKes / 12 * (0.4 + rand() * 0.7)),
+    inflow: Math.round(monthlyBase * (0.7 + 0.3 * Math.sin(i / 2))),
+    outflow: Math.round(monthlyBase * (0.5 + 0.2 * Math.cos(i / 2))),
   }));
 
   const rainfall = MONTHS.map((m, i) => ({
     m,
-    mm: Math.max(2, Math.round(climate.rainfallMmLast30d * (0.4 + Math.sin(i / 1.5) * 0.4 + rand() * 0.5))),
+    mm: Math.max(2, Math.round(climate.rainfallMmLast30d * (0.5 + 0.5 * Math.sin(i / 1.8 + 1)))),
   }));
 
   const yieldTrend = [2020, 2021, 2022, 2023, 2024, 2025].map((y, i) => ({
     y: String(y),
-    yield: Math.round((farmer.acreage || 1) * (8 + i * 1.3 + rand() * 3)) / 10,
+    yield: Math.round((farmer.acreage || 1) * (6 + i * 1.1 + score.total / 50)) / 10,
   }));
 
   const repaymentShare = [
-    { name: "On time", value: 72 + Math.round(rand() * 18), tone: "var(--success)" },
-    { name: "Late <30d", value: 14 + Math.round(rand() * 8), tone: "var(--accent)" },
-    { name: "Late >30d", value: 4 + Math.round(rand() * 6), tone: "var(--destructive)" },
+    { name: "On time", value: Math.min(95, 60 + Math.round(score.total * 0.35)), tone: "var(--success)" },
+    { name: "Late <30d", value: Math.max(5, 25 - Math.round(score.total * 0.1)), tone: "var(--accent)" },
+    { name: "Late >30d", value: Math.max(2, 15 - Math.round(score.total * 0.08)), tone: "var(--destructive)" },
   ];
 
   const scoreBands = [
     { name: "Score", value: score.total, fill: score.band === "Approve" ? "var(--success)" : score.band === "Refer" ? "var(--accent)" : "var(--destructive)" },
   ];
-
-  const farmerSms = smsOutbox.filter((s) => s.farmerId === farmer.id);
-  const farmerAudit = auditLog.filter((a) => a.farmerId === farmer.id);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -369,13 +437,13 @@ function FarmerDetailPage() {
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
           <div className="flex items-center justify-between">
             <h3 className="font-display text-lg font-semibold">SMS & audit trail</h3>
-            <span className="text-xs text-muted-foreground">{farmerSms.length + farmerAudit.length} events</span>
+            <span className="text-xs text-muted-foreground">{smsTrail.length + auditTrail.length} events</span>
           </div>
           <div className="mt-4 space-y-3">
-            {farmerSms.length === 0 && farmerAudit.length === 0 && (
+            {smsTrail.length === 0 && auditTrail.length === 0 && (
               <p className="text-sm text-muted-foreground">No messages or decisions logged yet.</p>
             )}
-            {farmerSms.map((s) => (
+            {smsTrail.map((s) => (
               <div key={s.id} className="rounded-xl border border-border bg-secondary/40 p-3">
                 <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
                   <span>SMS · {s.category}</span>
@@ -384,13 +452,13 @@ function FarmerDetailPage() {
                 <div className="mt-1 text-sm text-foreground">{s.body}</div>
               </div>
             ))}
-            {farmerAudit.map((a) => (
+            {auditTrail.map((a) => (
               <div key={a.id} className="rounded-xl border border-primary/30 bg-primary/5 p-3">
                 <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-primary">
                   <span>Officer decision · {a.decision}</span>
                   <span>{formatRelative(a.timestampIso)}</span>
                 </div>
-                <div className="mt-1 text-sm">{a.notes} · by {a.officer} · score {a.score}</div>
+                <div className="mt-1 text-sm">{a.notes} · by {a.officer} · score {a.score ?? "—"}</div>
               </div>
             ))}
           </div>

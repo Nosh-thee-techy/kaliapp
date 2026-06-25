@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState, useEffect } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -17,7 +17,6 @@ import {
 import { TrendingUp, Users, CloudRain, ArrowRight } from "lucide-react";
 import {
   farmers as mockFarmers,
-  climateSignals,
   STATUS_META,
   SEGMENT_META,
   formatRelative,
@@ -25,10 +24,14 @@ import {
   type DemographicSegment,
   type Farmer,
 } from "@/lib/mock-data";
-import { fetchGraphFarmers } from "@/lib/api-core";
+import { fetchGraphFarmers, fetchPortfolioStats } from "@/lib/api-core";
+import type { PortfolioStats } from "@/lib/api-core";
 import { useI18n } from "@/lib/i18n";
+import { requireOfficerSession } from "@/lib/require-officer";
+import { useOfficerChrome } from "@/lib/officer-chrome";
 
 export const Route = createFileRoute("/dashboard")({
+  beforeLoad: requireOfficerSession,
   head: () => ({
     meta: [
       { title: "Dashboard — KaLI" },
@@ -42,11 +45,16 @@ const segmentTabs: ("All" | DemographicSegment)[] = ["All", "Women", "Youth", "P
 
 function DashboardPage() {
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const { searchQuery, setSearchQuery, searchInputRef, registerQueueShortcuts } = useOfficerChrome();
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | "all">("all");
   const [segment, setSegment] = useState<"All" | DemographicSegment>("All");
-  const [q, setQ] = useState("");
+  const q = searchQuery;
+  const setQ = setSearchQuery;
   const [queue, setQueue] = useState<Farmer[]>(mockFarmers);
   const [graphLive, setGraphLive] = useState(false);
+  const [portfolio, setPortfolio] = useState<PortfolioStats | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     fetchGraphFarmers()
@@ -55,6 +63,10 @@ function DashboardPage() {
         setGraphLive(true);
       })
       .catch(() => setGraphLive(false));
+
+    fetchPortfolioStats()
+      .then(setPortfolio)
+      .catch(() => setPortfolio(null));
   }, []);
 
   const counts = useMemo(() => {
@@ -82,6 +94,29 @@ function DashboardPage() {
             f.name.toLowerCase().includes(term),
       );
   }, [statusFilter, segment, q, queue]);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [statusFilter, segment, q]);
+
+  const assessFarmer = useCallback(
+    (id: string) => {
+      navigate({ to: "/scorecard/$id", params: { id } });
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    registerQueueShortcuts({
+      moveDown: () => setSelectedIndex((i) => (filtered.length ? Math.min(i + 1, filtered.length - 1) : 0)),
+      moveUp: () => setSelectedIndex((i) => Math.max(i - 1, 0)),
+      assessSelected: () => {
+        const farmer = filtered[selectedIndex];
+        if (farmer) assessFarmer(farmer.id);
+      },
+    });
+    return () => registerQueueShortcuts(null);
+  }, [filtered, selectedIndex, assessFarmer, registerQueueShortcuts]);
 
   const friendlyStatus: Record<ApplicationStatus, string> = {
     awaiting_climate: t("dashboard.waiting"),
@@ -141,7 +176,7 @@ function DashboardPage() {
       </section>
 
       {/* CHARTS */}
-      <PortfolioCharts />
+      <PortfolioCharts queue={queue} portfolio={portfolio} graphLive={graphLive} />
 
       {/* QUEUE */}
       <section className="mt-12">
@@ -151,7 +186,7 @@ function DashboardPage() {
               {t("dashboard.queue")}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {filtered.length} of {farmers.length} requests
+              {filtered.length} of {queue.length} requests
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -175,14 +210,20 @@ function DashboardPage() {
           <div className="relative flex-1">
             <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">⌕</span>
             <input
+              ref={searchInputRef}
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={t("dashboard.search")}
+              placeholder={`${t("dashboard.search")} (/)`}
               className="w-full rounded-full border border-border bg-card pl-10 pr-4 py-3 text-sm shadow-card focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
             />
           </div>
+          <p className="text-[11px] text-muted-foreground lg:hidden">
+            <kbd className="rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px]">j</kbd>
+            <kbd className="ml-1 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px]">k</kbd> navigate ·{" "}
+            <kbd className="rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px]">Enter</kbd> assess
+          </p>
           <div className="flex flex-wrap gap-1.5">
-            <StatusChip active={statusFilter === "all"} onClick={() => setStatusFilter("all")} label={t("dashboard.allStatus")} count={farmers.length} />
+            <StatusChip active={statusFilter === "all"} onClick={() => setStatusFilter("all")} label={t("dashboard.allStatus")} count={queue.length} />
             {(Object.keys(STATUS_META) as ApplicationStatus[]).map((s) => (
               <StatusChip
                 key={s}
@@ -198,10 +239,14 @@ function DashboardPage() {
 
         {/* Card list (less crowded than a table) */}
         <div className="mt-6 grid gap-4">
-          {filtered.map((f) => (
+          {filtered.map((f, index) => (
             <div
               key={f.id}
-              className="group grid grid-cols-1 items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-elevated md:grid-cols-[1.4fr_1fr_1fr_auto]"
+              className={`group grid grid-cols-1 items-center gap-4 rounded-2xl border bg-card p-5 shadow-card transition-all md:grid-cols-[1.4fr_1fr_1fr_auto] ${
+                index === selectedIndex
+                  ? "border-primary ring-2 ring-primary/25"
+                  : "border-border hover:-translate-y-0.5 hover:shadow-elevated"
+              }`}
             >
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary-glow text-base font-semibold text-primary-foreground">
@@ -334,24 +379,28 @@ const SEGMENT_COLORS: Record<DemographicSegment, string> = {
   General: "var(--earth)",
 };
 
-function PortfolioCharts() {
+function PortfolioCharts({
+  queue,
+  portfolio,
+  graphLive,
+}: {
+  queue: Farmer[];
+  portfolio: PortfolioStats | null;
+  graphLive: boolean;
+}) {
   const { t } = useI18n();
+
   const segmentData = (["Women", "Youth", "PWD", "General"] as DemographicSegment[]).map((s) => ({
     name: s,
-    value: farmers.filter((f) => f.segment === s).length,
+    value: portfolio?.segments.find((x) => x.name === s)?.value ?? queue.filter((f) => f.segment === s).length,
   }));
 
-  const weeks = ["W-7", "W-6", "W-5", "W-4", "W-3", "W-2", "W-1", "Now"];
-  const trend = weeks.map((w, i) => ({
-    w,
-    sent: 6 + Math.round(Math.sin(i / 1.6) * 4 + i * 1.2),
-    requested: 9 + Math.round(Math.cos(i / 1.4) * 5 + i * 1.4),
-  }));
+  const trend = portfolio?.weekly ?? [];
 
-  const zoneRain = Object.values(climateSignals).map((c) => ({
-    zone: c.zoneCode.replace("KE-", ""),
-    mm: c.rainfallMmLast30d,
-    spi: c.spi,
+  const zoneRain = (portfolio?.zones ?? []).map((z) => ({
+    zone: z.zoneCode.replace("KE-", ""),
+    mm: z.rainfallMmLast30d,
+    spi: z.spi,
   }));
 
   return (
@@ -403,7 +452,9 @@ function PortfolioCharts() {
           <Users className="h-4 w-4 text-primary" />
           {t("dashboard.equity")}
         </div>
-        <div className="mt-1 font-display text-2xl font-semibold text-foreground">{farmers.length} people</div>
+        <div className="mt-1 font-display text-2xl font-semibold text-foreground">
+          {portfolio?.total ?? queue.length} people
+        </div>
         <div className="mt-2 flex h-[240px] items-center gap-4">
           <ResponsiveContainer width="55%" height="100%">
             <PieChart>
@@ -438,7 +489,9 @@ function PortfolioCharts() {
             </div>
             <div className="mt-1 font-display text-2xl font-semibold text-foreground">Last 30 days · mm</div>
           </div>
-          <span className="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">Updated 4h ago</span>
+          <span className="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">
+            {graphLive ? "Neo4j live" : "Offline estimate"}
+          </span>
         </div>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={zoneRain} margin={{ top: 20, right: 12, bottom: 0, left: -10 }}>

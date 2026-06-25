@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { auditLog, pipelineRuns, formatRelative, type PipelineRun } from "@/lib/mock-data";
-import { API_CORE_BASE } from "@/lib/api-core";
+import { fetchAuditLog, fetchPipeline } from "@/lib/api-core";
+import type { AuditEntry } from "@/lib/api-core";
+import { requireOfficerSession } from "@/lib/require-officer";
 
 export const Route = createFileRoute("/logs")({
+  beforeLoad: requireOfficerSession,
   head: () => ({
     meta: [
       { title: "Pipeline & Logs — KaLI" },
@@ -13,22 +16,50 @@ export const Route = createFileRoute("/logs")({
   component: LogsPage,
 });
 
-type StubResponse = { runs: PipelineRun[]; fetchedAt: string } | { error: string };
-
 function LogsPage() {
-  const [stub, setStub] = useState<StubResponse | null>(null);
+  const [pipeline, setPipeline] = useState<PipelineRun[]>(pipelineRuns);
+  const [pipelineLive, setPipelineLive] = useState(false);
+  const [pipelineSynced, setPipelineSynced] = useState<string | null>(null);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [auditLive, setAuditLive] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API_CORE_BASE}/api/pipeline`)
-      .then((r) => r.json())
-      .then((d) => !cancelled && setStub(d))
-      .catch(() =>
-        fetch("/api/climate")
-          .then((r) => r.json())
-          .then((d) => !cancelled && setStub(d))
-          .catch((e) => !cancelled && setStub({ error: String(e) })),
-      );
+    fetchPipeline()
+      .then((d) => {
+        if (cancelled) return;
+        setPipeline(d.runs);
+        setPipelineSynced(d.fetchedAt);
+        setPipelineLive(true);
+      })
+      .catch(() => {
+        if (!cancelled) setPipelineLive(false);
+      });
+
+    fetchAuditLog({ limit: 50 })
+      .then((entries) => {
+        if (cancelled) return;
+        setAudit(entries);
+        setAuditLive(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAudit(
+            auditLog.map((a) => ({
+              id: a.id,
+              farmerId: a.farmerId,
+              farmerName: a.farmerName,
+              officer: a.officer,
+              decision: a.decision,
+              notes: a.notes,
+              score: a.score,
+              timestampIso: a.timestampIso,
+            })),
+          );
+          setAuditLive(false);
+        }
+      });
+
     return () => {
       cancelled = true;
     };
@@ -48,16 +79,15 @@ function LogsPage() {
         Pipeline & Audit Ledger
       </h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Branch operations run offline-first. Python workers sync climate signals into Neo4j;
-        every credit decision is journaled below to prevent internal fraud.
+        Python workers sync climate signals into Neo4j; every credit decision is journaled below.
       </p>
 
       <section className="mt-8">
         <div className="flex items-baseline justify-between">
           <h2 className="font-display text-lg font-semibold text-foreground">Pipeline status matrix</h2>
           <span className="text-xs text-muted-foreground">
-            Endpoint: <code className="font-mono">/api/climate</code> ·{" "}
-            {stub && "fetchedAt" in stub ? `synced ${formatRelative(stub.fetchedAt)}` : "fetching…"}
+            {pipelineLive ? "Neo4j · " : "Mock · "}
+            {pipelineSynced ? `synced ${formatRelative(pipelineSynced)}` : "fetching…"}
           </span>
         </div>
         <div className="mt-3 overflow-hidden rounded-lg border border-border bg-card">
@@ -71,7 +101,7 @@ function LogsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {pipelineRuns.map((r) => (
+              {pipeline.map((r) => (
                 <tr key={r.source}>
                   <td className="px-4 py-3 font-medium text-foreground">{r.source}</td>
                   <td className="px-4 py-3 text-muted-foreground">{formatRelative(r.lastRunIso)}</td>
@@ -89,10 +119,15 @@ function LogsPage() {
       </section>
 
       <section className="mt-10">
-        <h2 className="font-display text-lg font-semibold text-foreground">Audit ledger</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Every generated credit score, chronologically. Read-only.
-        </p>
+        <div className="flex items-baseline justify-between">
+          <div>
+            <h2 className="font-display text-lg font-semibold text-foreground">Audit ledger</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Every committed decision from Neo4j <code className="text-xs">DECIDED</code> edges.
+            </p>
+          </div>
+          <span className="text-xs text-muted-foreground">{auditLive ? "Live graph" : "Mock fallback"}</span>
+        </div>
         <div className="mt-3 overflow-hidden rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-secondary/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -107,10 +142,20 @@ function LogsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {auditLog.map((a) => (
+              {audit.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                    No decisions logged yet. Commit a stance on a scorecard to see entries here.
+                  </td>
+                </tr>
+              )}
+              {audit.map((a) => (
                 <tr key={a.id}>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{a.id}</td>
-                  <td className="px-4 py-3 text-foreground">{a.farmerName} <span className="text-xs text-muted-foreground">({a.farmerId})</span></td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{String(a.id).slice(0, 8)}</td>
+                  <td className="px-4 py-3 text-foreground">
+                    {a.farmerName}{" "}
+                    <span className="text-xs text-muted-foreground">({a.farmerId})</span>
+                  </td>
                   <td className="px-4 py-3 text-foreground">{a.officer}</td>
                   <td className="px-4 py-3">
                     <span
@@ -125,7 +170,7 @@ function LogsPage() {
                       {a.decision}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right font-medium tabular-nums">{a.score}</td>
+                  <td className="px-4 py-3 text-right font-medium tabular-nums">{a.score ?? "—"}</td>
                   <td className="px-4 py-3 text-muted-foreground">{formatRelative(a.timestampIso)}</td>
                   <td className="px-4 py-3 text-muted-foreground">{a.notes}</td>
                 </tr>

@@ -3,8 +3,13 @@ import { useState } from "react";
 import { farmers, SEGMENT_META, STATUS_META } from "@/lib/mock-data";
 import { fetchGraphScorecard, postGraphDecision } from "@/lib/api-core";
 import type { GraphScorecard } from "@/lib/api-core";
+import { getOfficer } from "@/lib/officer-session";
+import { toast } from "sonner";
+import { requireOfficerSession } from "@/lib/require-officer";
+import { SadnessErrorPage } from "@/components/SadnessErrorPage";
 
 export const Route = createFileRoute("/scorecard/$id")({
+  beforeLoad: requireOfficerSession,
   head: ({ params }) => ({
     meta: [
       { title: `Scorecard ${params.id} — KaLI` },
@@ -23,13 +28,17 @@ export const Route = createFileRoute("/scorecard/$id")({
   },
   component: ScorecardPage,
   notFoundComponent: () => (
-    <main className="mx-auto max-w-3xl px-4 py-16 text-center">
-      <h1 className="font-display text-2xl font-semibold">Farmer not found</h1>
-      <p className="mt-2 text-sm text-muted-foreground">This record isn't in the Neo4j agricultural network.</p>
-      <Link to="/dashboard" className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">
-        Back to dashboard
-      </Link>
-    </main>
+    <SadnessErrorPage
+      variant="missing"
+      actions={
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center justify-center rounded-full bg-[#1a1a1a] px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+        >
+          Back to dashboard
+        </Link>
+      }
+    />
   ),
 });
 
@@ -98,13 +107,14 @@ function GraphScorecardView({
   async function logDecision(decision: "Approved" | "Referred" | "Declined") {
     setSubmitting(decision);
     try {
-      const result = await postGraphDecision(graph.id, { decision, stance, notes });
-      alert(
-        `Decision logged for ${graph.name}.\n\nStance: ${stance.replace(/_/g, " ")}\n\nSMS dispatched to ${graph.phone}:\n\n"${result.sms?.body || `KaLI Rating: ${score.total}/100. ${decision}.`}"`,
-      );
+      const officer = getOfficer()?.name || "Branch Officer";
+      const result = await postGraphDecision(graph.id, { decision, stance, notes, officer });
+      toast.success(`Decision logged for ${graph.name}`, {
+        description: result.sms?.body || `KaLI Rating: ${score.total}/100. ${decision}.`,
+      });
       navigate({ to: "/dashboard" });
     } catch {
-      alert("Neo4j write failed. Is the backend API running?");
+      toast.error("Neo4j write failed", { description: "Is the backend API running?" });
     } finally {
       setSubmitting(null);
     }
