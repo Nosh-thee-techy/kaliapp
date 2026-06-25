@@ -16,6 +16,9 @@ dist-ssr
 .nitro
 *.local
 
+# Root npm lockfile (frontend uses bun.lock; backend has its own)
+/package-lock.json
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
