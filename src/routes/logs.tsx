@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { auditLog, pipelineRuns, formatRelative, type PipelineRun } from "@/lib/mock-data";
+import { API_CORE_BASE } from "@/lib/api-core";
 
 export const Route = createFileRoute("/logs")({
   head: () => ({
@@ -19,10 +20,15 @@ function LogsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/climate")
+    fetch(`${API_CORE_BASE}/api/pipeline`)
       .then((r) => r.json())
       .then((d) => !cancelled && setStub(d))
-      .catch((e) => !cancelled && setStub({ error: String(e) }));
+      .catch(() =>
+        fetch("/api/climate")
+          .then((r) => r.json())
+          .then((d) => !cancelled && setStub(d))
+          .catch((e) => !cancelled && setStub({ error: String(e) })),
+      );
     return () => {
       cancelled = true;
     };
@@ -42,7 +48,7 @@ function LogsPage() {
         Pipeline & Audit Ledger
       </h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Branch operations run offline-first. Workers sync alternative-data signals into SQLite;
+        Branch operations run offline-first. Python workers sync climate signals into Neo4j;
         every credit decision is journaled below to prevent internal fraud.
       </p>
 

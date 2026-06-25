@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -16,14 +16,16 @@ import {
 } from "recharts";
 import { TrendingUp, Users, CloudRain, ArrowRight } from "lucide-react";
 import {
-  farmers,
+  farmers as mockFarmers,
   climateSignals,
   STATUS_META,
   SEGMENT_META,
   formatRelative,
   type ApplicationStatus,
   type DemographicSegment,
+  type Farmer,
 } from "@/lib/mock-data";
+import { fetchGraphFarmers } from "@/lib/api-core";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/dashboard")({
@@ -43,6 +45,17 @@ function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | "all">("all");
   const [segment, setSegment] = useState<"All" | DemographicSegment>("All");
   const [q, setQ] = useState("");
+  const [queue, setQueue] = useState<Farmer[]>(mockFarmers);
+  const [graphLive, setGraphLive] = useState(false);
+
+  useEffect(() => {
+    fetchGraphFarmers()
+      .then((rows) => {
+        setQueue(rows as unknown as Farmer[]);
+        setGraphLive(true);
+      })
+      .catch(() => setGraphLive(false));
+  }, []);
 
   const counts = useMemo(() => {
     const c: Record<ApplicationStatus, number> = {
@@ -51,13 +64,13 @@ function DashboardPage() {
       escalated: 0,
       disbursed: 0,
     };
-    farmers.forEach((f) => (c[f.status] += 1));
+    queue.forEach((f) => (c[f.status] += 1));
     return c;
-  }, []);
+  }, [queue]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    return farmers
+    return queue
       .filter((f) => (statusFilter === "all" ? true : f.status === statusFilter))
       .filter((f) => (segment === "All" ? true : f.segment === segment))
       .filter((f) =>
@@ -68,7 +81,7 @@ function DashboardPage() {
             f.phone.replace(/\s/g, "").includes(term.replace(/\s/g, "")) ||
             f.name.toLowerCase().includes(term),
       );
-  }, [statusFilter, segment, q]);
+  }, [statusFilter, segment, q, queue]);
 
   const friendlyStatus: Record<ApplicationStatus, string> = {
     awaiting_climate: t("dashboard.waiting"),
@@ -89,6 +102,11 @@ function DashboardPage() {
             {t("dashboard.greeting")} 👋
           </h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">{t("dashboard.subtitle")}</p>
+          {graphLive && (
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-primary">
+              Live · Neo4j graph queue
+            </p>
+          )}
         </div>
         <Link
           to="/farmer"
