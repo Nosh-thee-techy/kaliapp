@@ -18,9 +18,27 @@ export default defineConfig({
       server: { entry: "server" },
     }),
     viteReact(),
-    nitro(),
+    nitro({
+      devProxy: {
+        "/graph-api": {
+          target: process.env.VITE_API_CORE_URL || "http://localhost:4000",
+          changeOrigin: true,
+          prependPath: false,
+          rewrite: (path: string) => path.replace(/^\/graph-api/, ""),
+        },
+      },
+    }),
   ],
   resolve: {
     dedupe: ["react", "react-dom", "@tanstack/react-router", "@tanstack/react-start"],
+  },
+  server: {
+    proxy: {
+      "/graph-api": {
+        target: process.env.VITE_API_CORE_URL || "http://localhost:4000",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/graph-api/, ""),
+      },
+    },
   },
 });

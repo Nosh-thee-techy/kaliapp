@@ -1,3 +1,5 @@
+import { getAuthToken } from "./officer-session";
+
 export type GraphScoreDriver = {
   label: string;
   points: number;
@@ -76,16 +78,68 @@ export type GraphFarmerRow = {
   submittedIso: string;
 };
 
+export type PipelineRun = {
+  source: string;
+  lastRunIso: string;
+  status: "ok" | "warn" | "fail";
+  message: string;
+};
+
+export type AuditEntry = {
+  id: string;
+  farmerId: string;
+  farmerName: string;
+  officer: string;
+  decision: string;
+  stance?: string;
+  notes: string;
+  score: number | null;
+  timestampIso: string;
+};
+
+export type SmsMessage = {
+  id: string;
+  farmerId?: string;
+  to: string;
+  body: string;
+  category: "decision" | "climate" | "registration";
+  sentIso: string;
+};
+
+export type PortfolioStats = {
+  segments: { name: string; value: number }[];
+  zones: { zoneCode: string; name: string; spi: number; rainfallMmLast30d: number; pestProximityKm: number; advisory: string | null }[];
+  weekly: { w: string; requested: number; sent: number }[];
+  total: number;
+  fetchedAt?: string;
+};
+
+export type PublicStats = {
+  ready: number;
+  escalated: number;
+  advisories: number;
+  womenYouth: number;
+  total: number;
+};
+
+const DEFAULT_API = "http://localhost:4000";
+
 const BASE =
   typeof import.meta !== "undefined" && import.meta.env?.VITE_API_CORE_URL
     ? String(import.meta.env.VITE_API_CORE_URL).replace(/\/$/, "")
-    : "http://localhost:4000";
+    : DEFAULT_API;
+
+function apiPath(path: string) {
+  return `${BASE}${path}`;
+}
 
 async function graphFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const token = typeof window !== "undefined" ? getAuthToken() : null;
+  const res = await fetch(apiPath(path), {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   });
@@ -131,16 +185,78 @@ export async function postGraphDecision(
   });
 }
 
+export async function fetchPipeline(): Promise<{ runs: PipelineRun[]; fetchedAt: string }> {
+  return graphFetch("/api/pipeline");
+}
+
+export async function fetchAuditLog(params?: {
+  limit?: number;
+  farmerId?: string;
+}): Promise<AuditEntry[]> {
+  const q = new URLSearchParams();
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.farmerId) q.set("farmerId", params.farmerId);
+  const suffix = q.toString() ? `?${q}` : "";
+  const data = await graphFetch<{ entries: AuditEntry[] }>(`/api/audit${suffix}`);
+  return data.entries;
+}
+
+export async function fetchSmsMessages(params?: {
+  phone?: string;
+  farmerId?: string;
+  limit?: number;
+}): Promise<SmsMessage[]> {
+  const q = new URLSearchParams();
+  if (params?.phone) q.set("phone", params.phone);
+  if (params?.farmerId) q.set("farmerId", params.farmerId);
+  if (params?.limit) q.set("limit", String(params.limit));
+  const suffix = q.toString() ? `?${q}` : "";
+  const data = await graphFetch<{ messages: SmsMessage[] }>(`/api/sms${suffix}`);
+  return data.messages;
+}
+
+export async function fetchPortfolioStats(): Promise<PortfolioStats> {
+  return graphFetch("/api/stats/portfolio");
+}
+
+export async function fetchPublicStats(): Promise<PublicStats> {
+  return graphFetch("/api/stats/public");
+}
+
 export async function postUssdSession(body: {
   text?: string;
   phoneNumber: string;
 }): Promise<string> {
-  const res = await fetch(`${BASE}/ussd/ussd`, {
+  const res = await fetch(apiPath("/ussd/ussd"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   return res.text();
+}
+
+export type AuthResult = {
+  token: string;
+  officer: { name: string; email: string; branch: string };
+};
+
+export async function loginOfficer(email: string, password: string): Promise<AuthResult> {
+  return graphFetch<AuthResult>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function registerOfficer(body: {
+  name: string;
+  email: string;
+  password: string;
+  branch?: string;
+}): Promise<AuthResult> {
+  return graphFetch<AuthResult>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export { BASE as API_CORE_BASE };
