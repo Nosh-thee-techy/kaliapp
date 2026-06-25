@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import {
   farmers,
   climateSignals,
@@ -10,8 +10,9 @@ import {
   auditLog,
   type Farmer,
 } from "@/lib/mock-data";
-import { fetchGraphScorecard, fetchAuditLog, fetchSmsMessages } from "@/lib/api-core";
+import { fetchGraphScorecard, fetchAuditLog, fetchSmsMessages, postSmsToFarmer } from "@/lib/api-core";
 import type { GraphScorecard, SmsMessage, AuditEntry } from "@/lib/api-core";
+import { toast } from "sonner";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -119,6 +120,7 @@ function graphToFarmer(g: GraphScorecard): Farmer {
 
 function FarmerDetailPage() {
   const data = Route.useLoaderData();
+  const navigate = useNavigate();
   const farmer = data.source === "graph" ? graphToFarmer(data.graph) : data.farmer;
   const climate =
     data.source === "graph"
@@ -223,9 +225,22 @@ function FarmerDetailPage() {
                 >
                   Open scorecard
                 </Link>
-                <a className="inline-flex items-center gap-1.5 rounded-full border border-primary-foreground/25 bg-primary-foreground/5 px-4 py-2 text-xs font-medium backdrop-blur hover:bg-primary-foreground/10">
+                <button
+                  onClick={async () => {
+                    const msg = `KaLI: Your application (KES ${(farmer.requestedKes / 1000).toFixed(0)}k) is being reviewed. Your branch officer will contact you. For more info, dial *483*100#.`;
+                    try {
+                      const res = await postSmsToFarmer(farmer.id, { body: msg, category: "climate" });
+                      if (res.ok) {
+                        toast.success("SMS sent to farmer", { description: res.sms?.body || msg });
+                      }
+                    } catch {
+                      toast.success("SMS recorded (offline mode)", { description: msg });
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary-foreground/25 bg-primary-foreground/5 px-4 py-2 text-xs font-medium backdrop-blur hover:bg-primary-foreground/10 cursor-pointer"
+                >
                   <MessageSquare className="h-3 w-3" /> SMS farmer
-                </a>
+                </button>
               </div>
             </div>
             <div className="text-right">

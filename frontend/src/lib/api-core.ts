@@ -269,4 +269,62 @@ export async function registerOfficer(body: {
   });
 }
 
+export type AiNarrative = {
+  farmerId: string;
+  narrative: string;
+  model: string;
+  provider: string;
+  generatedAt: string;
+};
+
+export type MasumiPaymentResult = {
+  ok: boolean;
+  paymentId?: string;
+  status?: string;
+  amount?: number;
+  currency?: string;
+  recipient?: string;
+  farmerId?: string;
+  loanId?: string;
+  provider?: string;
+  error?: string;
+  note?: string;
+};
+
+export type PartnerTechStatus = {
+  neo4j: { enabled: boolean; provider: string };
+  featherless: { enabled: boolean; provider: string; configured: boolean };
+  masumi: { enabled: boolean; provider: string; configured: boolean };
+  africas_talking: { enabled: boolean; provider: string; configured: boolean };
+  open_meteo: { enabled: boolean; provider: string; configured: boolean };
+};
+
+export async function fetchAiNarrative(id: string): Promise<AiNarrative> {
+  return graphFetch<AiNarrative>(`/api/farmers/${encodeURIComponent(id)}/ai-narrative`);
+}
+
+export async function postMasumiDisburse(
+  id: string,
+  body: { amount?: number; officerId?: string },
+): Promise<MasumiPaymentResult> {
+  return graphFetch(`/api/farmers/${encodeURIComponent(id)}/masumi-disburse`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function postSmsToFarmer(
+  id: string,
+  body: { body: string; category?: string },
+): Promise<{ ok: boolean; sms: { body: string } }> {
+  return graphFetch(`/api/farmers/${encodeURIComponent(id)}/sms`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function fetchPartnerTechStatus(): Promise<PartnerTechStatus> {
+  return graphFetch("/api/partner-tech");
+}
+
 export { BASE as API_CORE_BASE };

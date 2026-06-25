@@ -275,54 +275,84 @@ export type ScoreBreakdown = {
   assetSubstituteApplied: boolean;
 };
 
-export function computeScore(farmer: Farmer, climate: ClimateSignal): ScoreBreakdown {
+export function computeScore(farmer: Farmer, climate: ClimateSignal, peerGuaranteed = false): ScoreBreakdown {
   const drivers: ScoreBreakdown["drivers"] = [];
   const drags: ScoreBreakdown["drags"] = [];
   let assetSubstituteApplied = false;
 
+  let score = 50;
+
   if (farmer.cooperativeDeliveryYears >= 3) {
-    drivers.push({ label: "Cooperative delivery history", points: 18, detail: `${farmer.cooperativeDeliveryYears} years of consistent deliveries to ${farmer.cooperative}` });
+    score += 15;
+    drivers.push({ label: "Cooperative delivery history", points: 15, detail: `${farmer.cooperativeDeliveryYears} years of consistent deliveries to ${farmer.cooperative}` });
   } else if (farmer.cooperativeDeliveryYears >= 1) {
+    score += 8;
     drivers.push({ label: "Emerging cooperative ties", points: 8, detail: `${farmer.cooperativeDeliveryYears} year(s) with ${farmer.cooperative}` });
   } else {
+    score -= 10;
     drags.push({ label: "No cooperative history", points: -10, detail: "Less than 1 year of verifiable deliveries" });
   }
 
   if (farmer.hasLandOwnership === 1) {
-    drivers.push({ label: "Land ownership verified", points: 20, detail: "Title deed on file" });
-  } else if (farmer.leaseDurationMonths >= 24 || farmer.cooperativeDeliveryYears >= 2) {
+    score += 10;
+    drivers.push({ label: "Land ownership verified", points: 10, detail: "Title deed on file" });
+  } else if (farmer.leaseDurationMonths >= 24) {
     assetSubstituteApplied = true;
-    drivers.push({ label: "Asset-substitute applied", points: 10, detail: `No title, but ${farmer.leaseDurationMonths}mo lease / ${farmer.cooperativeDeliveryYears}y co-op qualifies as collateral substitute` });
+    score += 15;
+    drivers.push({ label: "Stable lease framework", points: 15, detail: `${farmer.leaseDurationMonths} months lease overrides asset deficit` });
+  } else if (farmer.cooperativeDeliveryYears >= 2) {
+    assetSubstituteApplied = true;
+    score += 10;
+    drivers.push({ label: "Supply chain as collateral substitute", points: 10, detail: `${farmer.cooperativeDeliveryYears}y cooperative throughput substitutes for land title` });
   } else {
+    score -= 12;
     drags.push({ label: "No collateral or substitute", points: -12, detail: "No title, short lease, limited co-op tenure" });
   }
 
   if (farmer.chamaMonthsConsistent >= 18) {
+    score += 12;
     drivers.push({ label: "Chama saving consistency", points: 12, detail: `${farmer.chamaMonthsConsistent} consecutive months of group savings` });
   } else if (farmer.chamaMonthsConsistent >= 6) {
+    score += 6;
     drivers.push({ label: "Moderate savings discipline", points: 6, detail: `${farmer.chamaMonthsConsistent} months tracked` });
   }
 
   if (farmer.mobileMoneyInflowsKes >= 100000) {
+    score += 10;
     drivers.push({ label: "Mobile money cashflow", points: 10, detail: `KES ${farmer.mobileMoneyInflowsKes.toLocaleString()} inflows in last 12mo` });
-  } else if (farmer.mobileMoneyInflowsKes < 50000) {
+  } else if (farmer.mobileMoneyInflowsKes < 50000 && farmer.mobileMoneyInflowsKes > 0) {
+    score -= 5;
     drags.push({ label: "Thin mobile cashflow", points: -5, detail: `Only KES ${farmer.mobileMoneyInflowsKes.toLocaleString()} recorded` });
   }
 
+  if (peerGuaranteed) {
+    score += 10;
+    drivers.push({ label: "Peer guarantee (trust propagation)", points: 10, detail: "Credit risk mitigated by verified peer with Excellent standing" });
+  }
+
   if (climate.spi <= -1.5) {
-    drags.push({ label: "Severe drought signal", points: -15, detail: `SPI ${climate.spi.toFixed(1)} in ${climate.zoneCode} (CHIRPS/ICPAC)` });
+    score -= 15;
+    drags.push({ label: "Severe drought signal (climate contagion)", points: -15, detail: `SPI ${climate.spi.toFixed(1)} in ${climate.zoneCode} — shared climate hub risk` });
+  } else if (climate.spi <= -1.0) {
+    score -= 15;
+    drags.push({ label: "Climate zone dry spell", points: -15, detail: `SPI ${climate.spi.toFixed(1)} in ${climate.zoneCode}` });
   } else if (climate.spi <= -0.5) {
+    score -= 6;
     drags.push({ label: "Below-normal rainfall", points: -6, detail: `SPI ${climate.spi.toFixed(1)} — monitor closely` });
   } else if (climate.spi >= 0.5) {
+    score += 6;
     drivers.push({ label: "Favourable rainfall window", points: 6, detail: `SPI ${climate.spi.toFixed(1)} supports projected yield` });
   }
 
-  if (climate.pestProximityKm < 25) {
-    drags.push({ label: "Pest proximity alert", points: -8, detail: `Outbreak within ${climate.pestProximityKm}km of zone` });
+  if (climate.pestProximityKm <= 15) {
+    score -= 10;
+    drags.push({ label: "Pest proximity alert", points: -10, detail: `Active infestation tracked within ${climate.pestProximityKm}km of zone` });
+  } else if (climate.pestProximityKm < 25) {
+    score -= 8;
+    drags.push({ label: "Pest proximity warning", points: -8, detail: `Outbreak within ${climate.pestProximityKm}km of zone` });
   }
 
-  const base = 60;
-  const total = Math.max(0, Math.min(100, base + drivers.reduce((s, d) => s + d.points, 0) + drags.reduce((s, d) => s + d.points, 0)));
+  const total = Math.max(0, Math.min(100, score));
   const band: ScoreBreakdown["band"] = total >= 65 ? "Approve" : total >= 50 ? "Refer" : "Decline";
 
   return { total, band, drivers, drags, assetSubstituteApplied };

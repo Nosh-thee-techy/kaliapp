@@ -1,12 +1,13 @@
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { farmers, SEGMENT_META, STATUS_META } from "@/lib/mock-data";
-import { fetchGraphScorecard, postGraphDecision } from "@/lib/api-core";
-import type { GraphScorecard } from "@/lib/api-core";
+import { fetchGraphScorecard, postGraphDecision, fetchAiNarrative, postMasumiDisburse } from "@/lib/api-core";
+import type { GraphScorecard, AiNarrative } from "@/lib/api-core";
 import { getOfficer } from "@/lib/officer-session";
 import { toast } from "sonner";
 import { requireOfficerSession } from "@/lib/require-officer";
 import { SadnessErrorPage } from "@/components/SadnessErrorPage";
+import { Sparkles, Send, ExternalLink, Loader2, Brain, Wallet, CheckCircle2, MessageSquare } from "lucide-react";
 
 export const Route = createFileRoute("/scorecard/$id")({
   beforeLoad: requireOfficerSession,
@@ -86,6 +87,48 @@ function GraphScorecardView({
   setStance: (v: string) => void;
   navigate: ReturnType<typeof useNavigate>;
 }) {
+  const [aiNarrative, setAiNarrative] = useState<AiNarrative | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(false);
+  const [masumiLoading, setMasumiLoading] = useState(false);
+  const [masumiResult, setMasumiResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAiLoading(true);
+    setAiError(false);
+    fetchAiNarrative(graph.id)
+      .then((n) => {
+        setAiNarrative(n);
+        setAiLoading(false);
+      })
+      .catch(() => {
+        setAiError(true);
+        setAiLoading(false);
+      });
+  }, [graph.id]);
+
+  async function handleMasumiDisburse() {
+    setMasumiLoading(true);
+    try {
+      const officer = getOfficer()?.name || "Branch Officer";
+      const result = await postMasumiDisburse(graph.id, {
+        amount: graph.requested_kes,
+        officerId: officer,
+      });
+      if (result.ok) {
+        setMasumiResult(`Payment ID: ${result.paymentId} — ${result.status}`);
+        toast.success("Masumi disbursement initiated", {
+          description: `${result.paymentId} for KES ${graph.requested_kes.toLocaleString()}`,
+        });
+      } else {
+        toast.error("Masumi disbursement failed", { description: result.error });
+      }
+    } catch {
+      toast.error("Masumi network error", { description: "Is the backend running?" });
+    } finally {
+      setMasumiLoading(false);
+    }
+  }
   const score = {
     total: graph.total,
     band: graph.band,
@@ -289,6 +332,69 @@ function GraphScorecardView({
               <Row label="M-Pesa inflows (12mo)" value={`KES ${graph.mobile_money_inflows_kes.toLocaleString()}`} />
               <Row label="Land tenure" value={graph.has_land_ownership ? "Owned" : `${graph.lease_duration_months}mo lease`} />
             </dl>
+          </div>
+
+          {/* AI NARRATIVE PANEL */}
+          <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/5 to-transparent p-5 shadow-card">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Brain className="h-4 w-4 text-accent" />
+              AI Credit Narrative
+              {aiNarrative && (
+                <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[9px] font-medium text-accent-foreground">
+                  {aiNarrative.model.includes("Featherless") ? "Featherless AI" : aiNarrative.provider?.includes("Featherless") ? "Featherless AI" : "KaLI Engine"}
+                </span>
+              )}
+            </div>
+            {aiLoading && (
+              <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Generating narrative from graph data...
+              </div>
+            )}
+            {aiError && (
+              <div className="mt-3 text-sm text-muted-foreground">
+                AI narrative unavailable. {graph.name} has {score.drivers.length} drivers and {score.drags.length} drags affecting their {score.total}/100 score.
+              </div>
+            )}
+            {aiNarrative && (
+              <div className="mt-3 space-y-2">
+                <p className="text-sm leading-relaxed text-foreground/90">{aiNarrative.narrative}</p>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Model: {aiNarrative.model.split("/").pop() || aiNarrative.model}</span>
+                  <span>{aiNarrative.provider}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* MASUMI PAYMENT */}
+          <div className="rounded-xl border border-border bg-card p-5 shadow-card">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Wallet className="h-4 w-4 text-primary" />
+              Disburse via Masumi
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-medium text-primary">Partner Tech</span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Disburse KES {graph.requested_kes.toLocaleString()} to {graph.name} via the Masumi Payment Network.
+            </p>
+            {masumiResult ? (
+              <div className="mt-3 flex items-start gap-2 rounded-lg bg-success/10 p-3 text-xs text-success">
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{masumiResult}</span>
+              </div>
+            ) : (
+              <button
+                onClick={handleMasumiDisburse}
+                disabled={masumiLoading}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-glow transition-all hover:bg-primary/90 disabled:opacity-60"
+              >
+                {masumiLoading ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Processing...</>
+                ) : (
+                  <><ExternalLink className="h-3.5 w-3.5" /> Disburse KES {graph.requested_kes.toLocaleString()}</>
+                )}
+              </button>
+            )}
           </div>
         </aside>
       </div>

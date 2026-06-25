@@ -3,6 +3,8 @@ import {
   getScorecard,
   getFarmers,
   postDecision,
+  postSmsToFarmer,
+  getFarmersDuplicateCheck,
   getPipeline,
   postPipelineSync,
   getAudit,
@@ -10,6 +12,9 @@ import {
   getPortfolio,
   getPublicStats,
   healthCheck,
+  getAiNarrative,
+  postMasumiDisburse,
+  getPartnerTechStatus,
 } from "../controllers/scorecardController.js";
 import authRoutes from "./auth.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
@@ -34,7 +39,12 @@ router.post("/pipeline/sync", postPipelineSync);
 router.get("/audit", getAudit);
 router.get("/stats/portfolio", getPortfolio);
 router.get("/farmers", getFarmers);
+router.get("/farmers/duplicates", getFarmersDuplicateCheck);
 router.get("/scorecard/:id", getScorecard);
 router.post("/farmers/:id/decision", postDecision);
+router.post("/farmers/:id/sms", postSmsToFarmer);
+router.get("/farmers/:id/ai-narrative", getAiNarrative);
+router.post("/farmers/:id/masumi-disburse", postMasumiDisburse);
+router.get("/partner-tech", getPartnerTechStatus);
 
 export default router;

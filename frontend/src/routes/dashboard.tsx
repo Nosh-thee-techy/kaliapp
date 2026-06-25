@@ -57,7 +57,7 @@ function DashboardPage() {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
-    fetchGraphFarmers()
+    fetchGraphFarmers({ status: "all", segment: "All" })
       .then((rows) => {
         setQueue(rows as unknown as Farmer[]);
         setGraphLive(true);

@@ -3,37 +3,78 @@ import { getDriver } from "../config/neo4j.js";
 const CHIRPS_SOURCE = "CHIRPS Rainfall Grids";
 const ICPAC_SOURCE = "ICPAC SPI Index";
 const PEST_SOURCE = "Pest Proximity Feed (KALRO)";
+const OPEN_METEO_SOURCE = "Open-Meteo Weather API";
 
-/** Jitter climate readings — replace with real CHIRPS/ICPAC API calls in production. */
-function nextClimateReading(zone) {
-  const spi = Number(zone.spi) || 0;
-  const rainfall = Number(zone.rainfallMmLast30d) || 40;
-  const pestKm = Number(zone.pestProximityKm) || 50;
+const ZONE_COORDS = {
+  "KE-RIFT-04": { lat: -0.75, lon: 36.38, name: "Naivasha Basin" },
+  "KE-RIFT-02": { lat: 0.52, lon: 35.28, name: "Uasin Gishu Plateau" },
+  "KE-NE-01": { lat: -0.45, lon: 39.65, name: "North Eastern Range" },
+  "KE-NYZ-03": { lat: -0.18, lon: 34.52, name: "Ahero Irrigation Belt" },
+  "KE-CEN-01": { lat: -0.48, lon: 37.13, name: "Mt. Kenya South" },
+  "KE-EAS-02": { lat: -1.52, lon: 37.27, name: "Machakos Lowlands" },
+};
 
-  const rainDelta = (Math.random() - 0.45) * 18;
-  const newRainfall = Math.max(0, Math.round(rainfall + rainDelta));
-  const spiDelta = (Math.random() - 0.5) * 0.35;
-  let newSpi = Math.round((spi + spiDelta) * 10) / 10;
-  newSpi = Math.max(-2.5, Math.min(2, newSpi));
+async function fetchOpenMeteoData(lat, lon) {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=precipitation_sum,temperature_2m_max&past_days=30&forecast_days=0&timezone=Africa/Nairobi`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.warn("[open-meteo] fetch failed:", err.message);
+    return null;
+  }
+}
 
-  const pestDelta = (Math.random() - 0.5) * 8;
-  const newPestKm = Math.max(5, Math.round(pestKm + pestDelta));
+function computeSPI(rainfallValues) {
+  if (!rainfallValues || rainfallValues.length < 10) return null;
+  const mean = rainfallValues.reduce((a, b) => a + b, 0) / rainfallValues.length;
+  const variance = rainfallValues.reduce((a, b) => a + (b - mean) ** 2, 0) / rainfallValues.length;
+  const stdDev = Math.sqrt(variance);
+  if (stdDev === 0) return 0;
+  const total30d = rainfallValues.reduce((a, b) => a + b, 0);
+  const spi = (total30d - mean * 30) / (stdDev * Math.sqrt(30));
+  return Math.max(-3, Math.min(3, Math.round(spi * 10) / 10));
+}
 
-  let advisory = zone.advisory || null;
-  if (newSpi <= -1.5) {
-    advisory = `Severe drought signal (SPI ${newSpi}) — defer input credit until rainfall recovers.`;
-  } else if (newPestKm < 20) {
-    advisory = `Pest/locust activity within ${newPestKm}km — scout fields within 72h.`;
-  } else if (newSpi > -0.5 && newPestKm > 40) {
+function nextClimateReading(zone, openMeteoData) {
+  const prevAdvisory = zone.advisory;
+  let spi, rainfall, pestKm, advisory, openMeteoUsed;
+
+  if (openMeteoData?.daily?.precipitation_sum) {
+    const rainfallValues = openMeteoData.daily.precipitation_sum.filter((v) => v !== null);
+    rainfall = rainfallValues.length > 0
+      ? Math.round(rainfallValues.reduce((a, b) => a + b, 0))
+      : Math.round((zone.rainfallMmLast30d || 40) + (Math.random() - 0.45) * 18);
+    spi = computeSPI(rainfallValues) ?? (zone.spi || 0) + (Math.random() - 0.5) * 0.35;
+    openMeteoUsed = true;
+  } else {
+    rainfall = Math.max(0, Math.round((zone.rainfallMmLast30d || 40) + (Math.random() - 0.45) * 18));
+    const spiDelta = (Math.random() - 0.5) * 0.35;
+    spi = Math.max(-2.5, Math.min(2, Math.round(((zone.spi || 0) + spiDelta) * 10) / 10));
+    openMeteoUsed = false;
+  }
+
+  pestKm = Math.max(5, Math.round((zone.pestProximityKm || 50) + (Math.random() - 0.5) * 8));
+
+  if (spi <= -1.5) {
+    advisory = `Severe drought signal (SPI ${spi}) — defer input credit until rainfall recovers.`;
+  } else if (pestKm < 20) {
+    advisory = `Pest/locust activity within ${pestKm}km — scout fields within 72h.`;
+  } else if (spi > -0.5 && pestKm > 40) {
     advisory = null;
+  } else {
+    advisory = prevAdvisory;
   }
 
   return {
     zoneCode: zone.zoneCode,
-    rainfall_mm_last_30d: newRainfall,
-    current_spi_index: newSpi,
-    pest_proximity_km: newPestKm,
+    rainfall_mm_last_30d: rainfall,
+    current_spi_index: spi,
+    pest_proximity_km: pestKm,
     advisory,
+    openMeteoUsed,
   };
 }
 
@@ -56,15 +97,25 @@ export async function syncClimatePipeline() {
     const zones = zonesResult.records.map((r) => ({
       zoneCode: r.get("id"),
       name: r.get("name"),
-      spi: r.get("spi"),
-      rainfallMmLast30d: r.get("rainfall"),
-      pestProximityKm: r.get("pest"),
+      spi: r.get("spi") ? Number(r.get("spi")) : 0,
+      rainfallMmLast30d: r.get("rainfall") ? Number(r.get("rainfall")) : 40,
+      pestProximityKm: r.get("pest") ? Number(r.get("pest")) : 50,
       advisory: r.get("advisory"),
     }));
 
-    const updates = zones.map(nextClimateReading);
+    const openMeteoCache = {};
+    for (const z of zones) {
+      const coords = ZONE_COORDS[z.zoneCode];
+      if (coords) {
+        openMeteoCache[z.zoneCode] = await fetchOpenMeteoData(coords.lat, coords.lon);
+      }
+    }
 
+    const updates = zones.map((z) => nextClimateReading(z, openMeteoCache[z.zoneCode]));
+
+    let openMeteoCount = 0;
     for (const u of updates) {
+      if (u.openMeteoUsed) openMeteoCount++;
       await session.run(
         `
         MATCH (z:ClimateZone {id: $zoneCode})
@@ -86,44 +137,37 @@ export async function syncClimatePipeline() {
     }
 
     await session.run(
-      `
-      MERGE (p:PipelineRun {source: $source})
-      SET p.status = "ok",
-          p.message = $message,
-          p.last_run_iso = $syncedAt
-    `,
+      `MERGE (p:PipelineRun {source: $source})
+       SET p.status = "ok",
+           p.message = $message,
+           p.last_run_iso = $syncedAt`,
       {
-        source: CHIRPS_SOURCE,
-        message: `${updates.length} zones refreshed`,
+        source: openMeteoCount > 0 ? OPEN_METEO_SOURCE : CHIRPS_SOURCE,
+        message: `${updates.length} zones refreshed (${openMeteoCount} via Open-Meteo live API)`,
         syncedAt,
       },
     );
 
     await session.run(
-      `
-      MERGE (p:PipelineRun {source: $source})
-      SET p.status = "ok",
-          p.message = "SPI indices recomputed for all climate hubs",
-          p.last_run_iso = $syncedAt
-    `,
+      `MERGE (p:PipelineRun {source: $source})
+       SET p.status = "ok",
+           p.message = "SPI indices recomputed for all climate hubs",
+           p.last_run_iso = $syncedAt`,
       { source: ICPAC_SOURCE, syncedAt },
     );
 
     const pestWarnings = updates.filter((u) => u.pest_proximity_km < 25).length;
     await session.run(
-      `
-      MERGE (p:PipelineRun {source: $source})
-      SET p.status = $status,
-          p.message = $message,
-          p.last_run_iso = $syncedAt
-    `,
+      `MERGE (p:PipelineRun {source: $source})
+       SET p.status = $status,
+           p.message = $message,
+           p.last_run_iso = $syncedAt`,
       {
         source: PEST_SOURCE,
         status: pestWarnings > 0 ? "warn" : "ok",
-        message:
-          pestWarnings > 0
-            ? `${pestWarnings} zone(s) within pest proximity threshold`
-            : "No new pest outbreaks detected",
+        message: pestWarnings > 0
+          ? `${pestWarnings} zone(s) within pest proximity threshold`
+          : "No new pest outbreaks detected",
         syncedAt,
       },
     );
@@ -142,7 +186,15 @@ export async function syncClimatePipeline() {
       syncedAt,
       zonesUpdated: updates.length,
       farmersPromoted,
-      zones: updates,
+      openMeteoUsed: openMeteoCount,
+      zones: updates.map((u) => ({
+        zoneCode: u.zoneCode,
+        spi: u.current_spi_index,
+        rainfallMmLast30d: u.rainfall_mm_last_30d,
+        pestProximityKm: u.pest_proximity_km,
+        advisory: u.advisory,
+        openMeteoUsed: u.openMeteoUsed,
+      })),
     };
   } finally {
     await session.close();

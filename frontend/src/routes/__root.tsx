@@ -141,13 +141,15 @@ function Sidebar() {
       <button className="flex h-12 w-12 items-center justify-center rounded-2xl text-primary-foreground/50 hover:bg-white/10 hover:text-primary-foreground">
         <Settings className="h-5 w-5" />
       </button>
-      <Link
-        to="/auth"
-        onClick={() => clearOfficer()}
+      <button
+        onClick={() => {
+          clearOfficer();
+          window.location.href = "/auth";
+        }}
         className="flex h-12 w-12 items-center justify-center rounded-2xl text-primary-foreground/50 hover:bg-white/10 hover:text-primary-foreground"
       >
         <LogOut className="h-5 w-5" />
-      </Link>
+      </button>
     </aside>
   );
 }

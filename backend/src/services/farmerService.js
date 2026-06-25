@@ -2,7 +2,7 @@ import neo4j from "neo4j-driver";
 import { getDriver } from "../config/neo4j.js";
 import { sendSms } from "./africasTalking.js";
 
-export async function listFarmers({ status, segment } = {}) {
+export async function listFarmers({ status, segment, search, page = 1, pageSize = 50 } = {}) {
   const session = getDriver().session();
   const where = [];
   const params = {};
@@ -15,19 +15,43 @@ export async function listFarmers({ status, segment } = {}) {
     where.push("f.demographic_group = $segment");
     params.segment = segment;
   }
+  if (search && search.trim()) {
+    const term = search.trim();
+    where.push(`(
+      toLower(f.name) CONTAINS toLower($search) OR
+      f.national_id CONTAINS $search OR
+      f.id CONTAINS toUpper($search) OR
+      replace(f.phone_number, ' ', '') CONTAINS replace($search, ' ', '')
+    )`);
+    params.search = term;
+  }
+
+  const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const skip = (page - 1) * pageSize;
+
+  const countCypher = `
+    MATCH (f:Farmer)
+    ${whereClause}
+    RETURN count(f) AS total
+  `;
 
   const cypher = `
     MATCH (f:Farmer)
     OPTIONAL MATCH (f)-[:DELIVERS_TO]->(coop:Cooperative)
     OPTIONAL MATCH (coop)-[:OPERATES_IN]->(zone:ClimateZone)
-  ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+    ${whereClause}
     RETURN f, coop, zone
     ORDER BY f.submitted_iso DESC
+    SKIP $skip
+    LIMIT $limit
   `;
 
   try {
-    const result = await session.run(cypher, params);
-    return result.records.map((r) => {
+    const countResult = await session.run(countCypher, params);
+    const total = countResult.records[0]?.get("total").toNumber() || 0;
+
+    const result = await session.run(cypher, { ...params, skip: neo4j.int(skip), limit: neo4j.int(pageSize) });
+    const farmers = result.records.map((r) => {
       const f = r.get("f").properties;
       const coop = r.get("coop")?.properties;
       const zone = r.get("zone")?.properties;
@@ -56,6 +80,7 @@ export async function listFarmers({ status, segment } = {}) {
         submittedIso: f.submitted_iso,
       };
     });
+    return { farmers, total, page, pageSize };
   } finally {
     await session.close();
   }
@@ -125,6 +150,32 @@ export async function recordDecision(lookup, { decision, stance, notes, officer,
       console.warn("[sms] delivery failed (graph node saved):", err.message);
     }
     return { farmer: f, sms };
+  } finally {
+    await session.close();
+  }
+}
+
+export async function recordSmsSent(lookup, { body, category = "officer" }) {
+  const session = getDriver().session();
+  try {
+    const result = await session.run(
+      `
+      MATCH (f:Farmer)
+      WHERE f.id = $lookup OR f.national_id = $lookup
+      CREATE (sms:SmsMessage {
+        id: randomUUID(),
+        to: f.phone_number,
+        body: $body,
+        category: $category,
+        sent_iso: toString(datetime())
+      })
+      CREATE (f)-[:NOTIFIED]->(sms)
+      RETURN sms
+    `,
+      { lookup, body, category },
+    );
+    if (result.records.length === 0) return null;
+    return result.records[0].get("sms").properties;
   } finally {
     await session.close();
   }
@@ -338,7 +389,8 @@ export async function listClimateZones() {
 }
 
 export async function getPortfolioStats() {
-  const farmers = await listFarmers();
+  const data = await listFarmers();
+  const farmers = data.farmers;
   const zones = await listClimateZones();
 
   const segments = ["Women", "Youth", "PWD", "General"].map((name) => ({
@@ -367,7 +419,8 @@ export async function getPortfolioStats() {
 }
 
 export async function getPublicStats() {
-  const farmers = await listFarmers();
+  const data = await listFarmers();
+  const farmers = data.farmers;
   const zones = await listClimateZones();
   return {
     ready: farmers.filter((f) => f.status === "ready_for_review").length,
@@ -376,6 +429,27 @@ export async function getPublicStats() {
     womenYouth: farmers.filter((f) => f.segment === "Women" || f.segment === "Youth").length,
     total: farmers.length,
   };
+}
+
+export async function findUniqueFarmers() {
+  const session = getDriver().session();
+  try {
+    const result = await session.run(`
+      MATCH (f:Farmer)
+      WITH f.phone_number AS phone, collect(f) AS farmers
+      WHERE size(farmers) > 1
+      UNWIND farmers AS f
+      RETURN f.id AS id, f.name AS name, f.phone_number AS phone
+      ORDER BY f.submitted_iso DESC
+    `);
+    return result.records.map((r) => ({
+      id: r.get("id"),
+      name: r.get("name"),
+      phone: r.get("phone"),
+    }));
+  } finally {
+    await session.close();
+  }
 }
 
 function toNum(v) {
