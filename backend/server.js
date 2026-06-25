@@ -8,7 +8,11 @@ import { verifyConnectivity, closeDriver } from "./src/config/neo4j.js";
 const app = express();
 const PORT = Number(process.env.API_CORE_PORT) || 4000;
 
-app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+  : ["http://localhost:3000", "http://localhost:5173"];
+
+app.use(cors({ origin: corsOrigins }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
