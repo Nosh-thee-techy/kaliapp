@@ -1,0 +1,301 @@
+import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import {
+  farmers,
+  climateSignals,
+  computeScore,
+  SEGMENT_META,
+  STATUS_META,
+} from "@/lib/mock-data";
+
+export const Route = createFileRoute("/scorecard/$id")({
+  head: ({ params }) => ({
+    meta: [
+      { title: `Scorecard ${params.id} — KaLI` },
+      { name: "description", content: "Explanatory underwriting scorecard with drivers, drags, and manual override." },
+    ],
+  }),
+  loader: ({ params }) => {
+    const farmer = farmers.find((f) => f.id === params.id);
+    if (!farmer) throw notFound();
+    return { farmer };
+  },
+  component: ScorecardPage,
+  notFoundComponent: () => (
+    <main className="mx-auto max-w-3xl px-4 py-16 text-center">
+      <h1 className="font-display text-2xl font-semibold">Farmer not found</h1>
+      <p className="mt-2 text-sm text-muted-foreground">This record isn't in the local SQLite cache.</p>
+      <Link to="/dashboard" className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">
+        Back to dashboard
+      </Link>
+    </main>
+  ),
+});
+
+function ScorecardPage() {
+  const data = Route.useLoaderData();
+  const farmer = data.farmer as import("@/lib/mock-data").Farmer;
+  const navigate = useNavigate();
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState<null | string>(null);
+  const [stance, setStance] = useState<string>("approve_flexible");
+
+  const climate = climateSignals[farmer.zoneCode];
+  const score = useMemo(() => computeScore(farmer, climate), [farmer, climate]);
+
+  const bandGradient =
+    score.band === "Approve"
+      ? "from-success to-primary"
+      : score.band === "Refer"
+        ? "from-warning to-accent"
+        : "from-destructive to-accent";
+
+  function logDecision(decision: "Approved" | "Referred" | "Declined") {
+    setSubmitting(decision);
+    setTimeout(() => {
+      alert(
+        `Decision logged for ${farmer.name}.\n\nStance: ${stance.replace(/_/g, " ")}\n\nSMS dispatched to ${farmer.phone}:\n\n"KaLI Rating: ${score.total}/100. ${decision}. Repayment set for ${farmer.harvestMonth} harvest cycle."`,
+      );
+      navigate({ to: "/dashboard" });
+    }, 500);
+  }
+
+  return (
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground">
+        ← Back to queue
+      </Link>
+
+      <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_340px]">
+        <div>
+          {/* Farmer header */}
+          <div className="rounded-2xl border border-border bg-gradient-card p-6 shadow-card">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  {farmer.id} · {farmer.cooperative}
+                </p>
+                <h1 className="mt-1.5 font-display text-3xl font-semibold text-foreground">{farmer.name}</h1>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className={`rounded-full px-2.5 py-0.5 font-medium ${SEGMENT_META[farmer.segment].tone}`}>
+                    {SEGMENT_META[farmer.segment].label}
+                  </span>
+                  <Tag>{farmer.vulnerabilityTag}</Tag>
+                  <Tag>{farmer.cropType}</Tag>
+                  <Tag>{farmer.acreage} acres · {farmer.harvestMonth} harvest</Tag>
+                  <Tag>{farmer.zoneName}</Tag>
+                  <Tag>{farmer.phone}</Tag>
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 ${STATUS_META[farmer.status].tone}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META[farmer.status].dot}`} />
+                    {STATUS_META[farmer.status].label}
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-background/60 px-4 py-3 text-right">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Requested</div>
+                <div className="font-display text-2xl font-semibold tabular-nums text-foreground">
+                  KES {farmer.requestedKes.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-muted-foreground">via {farmer.registeredVia}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Asset-substitute banner */}
+          {score.assetSubstituteApplied && (
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-accent/30 bg-accent/8 p-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-harvest text-primary-foreground shadow-card">
+                ⚖
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Asset-substitute logic triggered</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  No land title on file. Engine compensated baseline using{" "}
+                  <strong className="text-foreground">{farmer.leaseDurationMonths}mo lease</strong> +{" "}
+                  <strong className="text-foreground">{farmer.cooperativeDeliveryYears}y co-op throughput</strong>{" "}
+                  rather than auto-rejecting. Officer override possible below.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Drivers & Drags */}
+          <section className="mt-6">
+            <h2 className="font-display text-lg font-semibold text-foreground">Multi-signal contextual engine</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Score computed at page load via a join across farmer, cooperative, mobile-money, and climate tables.
+            </p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Panel title="Drivers" subtitle="Positive alternative signals" tone="success" items={score.drivers} />
+              <Panel title="Drags" subtitle="Risk markers & environmental warnings" tone="destructive" items={score.drags} />
+            </div>
+          </section>
+
+          {/* Decision matrix */}
+          <section className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-card">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="font-display text-lg font-semibold text-foreground">Decision post matrix</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Choose the structural stance. Submission writes to SQLite and dispatches SMS to the farmer.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {[
+                { id: "approve_flexible", label: "Approve · Flexible Repayment", hint: "Align installments to harvest cycle" },
+                { id: "approve_standard", label: "Approve · Standard Terms", hint: "Default 6-month schedule" },
+                { id: "refer_committee", label: "Refer to Regional Committee", hint: "Escalate for supervisor override" },
+                { id: "decline_with_reason", label: "Decline with Reason", hint: "Triggers structured rejection SMS" },
+              ].map((opt) => (
+                <label
+                  key={opt.id}
+                  className={`cursor-pointer rounded-lg border p-3 transition-all ${
+                    stance === opt.id
+                      ? "border-primary bg-primary/5 shadow-card"
+                      : "border-border bg-background hover:border-primary/40"
+                  }`}
+                >
+                  <input type="radio" name="stance" className="sr-only" checked={stance === opt.id} onChange={() => setStance(opt.id)} />
+                  <div className="text-sm font-medium text-foreground">{opt.label}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{opt.hint}</div>
+                </label>
+              ))}
+            </div>
+
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Field verification, supervisor consultation, community references…"
+              className="mt-4 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
+            />
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                disabled={!!submitting}
+                onClick={() => logDecision(stance.startsWith("approve") ? "Approved" : stance.startsWith("refer") ? "Referred" : "Declined")}
+                className="inline-flex items-center rounded-lg bg-gradient-hero px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:opacity-95 disabled:opacity-60"
+              >
+                {submitting ? "Writing to SQLite…" : "Commit decision & dispatch SMS"}
+              </button>
+              <Link
+                to="/dashboard"
+                className="inline-flex items-center rounded-lg border border-input bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+              >
+                Cancel
+              </Link>
+            </div>
+          </section>
+        </div>
+
+        {/* Sidebar */}
+        <aside className="space-y-4">
+          <div className={`rounded-2xl bg-gradient-to-br ${bandGradient} p-6 text-center text-primary-foreground shadow-elevated texture-grain`}>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-primary-foreground/80">KaLI Alternative Score</p>
+            <div className="mt-2 font-display text-6xl font-semibold tabular-nums leading-none">
+              {score.total}
+              <span className="text-2xl text-primary-foreground/70">/100</span>
+            </div>
+            <span className="mt-3 inline-flex rounded-full bg-background/20 px-3 py-1 text-xs font-medium backdrop-blur">
+              Recommendation: {score.band}
+            </span>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-5 shadow-card">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground">Climate context</h3>
+              <span className="font-mono text-[10px] text-muted-foreground">{climate.zoneCode}</span>
+            </div>
+            <dl className="mt-3 space-y-2 text-sm">
+              <Row label="SPI (drought index)" value={climate.spi.toFixed(1)} tone={climate.spi <= -1.5 ? "danger" : climate.spi <= -0.5 ? "warn" : "ok"} />
+              <Row label="Rainfall (30d)" value={`${climate.rainfallMmLast30d} mm`} />
+              <Row label="Pest proximity" value={`${climate.pestProximityKm} km`} tone={climate.pestProximityKm < 25 ? "danger" : "ok"} />
+            </dl>
+            {climate.advisory && (
+              <div className="mt-3 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning-foreground">
+                <strong>Active advisory:</strong> {climate.advisory}
+              </div>
+            )}
+            <p className="mt-3 text-[11px] text-muted-foreground">Source: CHIRPS + ICPAC (cached locally).</p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-5 shadow-card">
+            <h3 className="text-sm font-semibold text-foreground">Cashflow & co-op signals</h3>
+            <dl className="mt-3 space-y-2 text-sm">
+              <Row label="Co-op delivery" value={`${farmer.cooperativeDeliveryYears}y`} />
+              <Row label="Chama streak" value={`${farmer.chamaMonthsConsistent} mo`} />
+              <Row label="M-Pesa inflows (12mo)" value={`KES ${farmer.mobileMoneyInflowsKes.toLocaleString()}`} />
+              <Row label="Land tenure" value={farmer.hasLandOwnership ? "Owned" : `${farmer.leaseDurationMonths}mo lease`} />
+            </dl>
+          </div>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
+function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full border border-border bg-secondary/60 px-2.5 py-0.5 text-xs text-secondary-foreground">
+      {children}
+    </span>
+  );
+}
+
+function Panel({
+  title,
+  subtitle,
+  tone,
+  items,
+}: {
+  title: string;
+  subtitle: string;
+  tone: "success" | "destructive";
+  items: { label: string; points: number; detail: string }[];
+}) {
+  const accent =
+    tone === "success"
+      ? "border-success/30 bg-gradient-to-br from-success/8 to-transparent"
+      : "border-destructive/30 bg-gradient-to-br from-destructive/8 to-transparent";
+  const dot = tone === "success" ? "bg-success" : "bg-destructive";
+  const points = tone === "success" ? "text-success" : "text-destructive";
+  return (
+    <div className={`rounded-xl border ${accent} p-4 shadow-card`}>
+      <div className="flex items-baseline justify-between">
+        <h3 className="font-display text-base font-semibold text-foreground">{title}</h3>
+        <span className="text-[11px] text-muted-foreground">{subtitle}</span>
+      </div>
+      <ul className="mt-3 space-y-3">
+        {items.length === 0 && <li className="text-sm text-muted-foreground">No entries.</li>}
+        {items.map((it, i) => (
+          <li key={i} className="flex gap-3">
+            <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+            <div className="flex-1">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm font-medium text-foreground">{it.label}</span>
+                <span className={`text-sm font-semibold tabular-nums ${points}`}>
+                  {it.points > 0 ? "+" : ""}
+                  {it.points}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">{it.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Row({ label, value, tone }: { label: string; value: string; tone?: "ok" | "warn" | "danger" }) {
+  const valueTone =
+    tone === "danger" ? "text-destructive" : tone === "warn" ? "text-accent" : "text-foreground";
+  return (
+    <div className="flex items-center justify-between">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className={`font-medium tabular-nums ${valueTone}`}>{value}</dd>
+    </div>
+  );
+}
