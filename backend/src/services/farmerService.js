@@ -1,4 +1,6 @@
+import neo4j from "neo4j-driver";
 import { getDriver } from "../config/neo4j.js";
+import { sendSms } from "./africasTalking.js";
 
 export async function listFarmers({ status, segment } = {}) {
   const session = getDriver().session();
@@ -59,7 +61,7 @@ export async function listFarmers({ status, segment } = {}) {
   }
 }
 
-export async function recordDecision(lookup, { decision, stance, notes, officer }) {
+export async function recordDecision(lookup, { decision, stance, notes, officer, score }) {
   const session = getDriver().session();
   const statusMap = {
     Approved: "disbursed",
@@ -83,6 +85,7 @@ export async function recordDecision(lookup, { decision, stance, notes, officer 
       stance: $stance,
       notes: $notes,
       officer: $officer,
+      score: $score,
       timestamp_iso: toString(datetime())
     })
     CREATE (f)-[:DECIDED {at: datetime()}]->(a)
@@ -110,10 +113,16 @@ export async function recordDecision(lookup, { decision, stance, notes, officer 
       notes: notes || "",
       officer: officer || "Branch Officer",
       smsBody,
+      score: score ?? null,
     });
     if (result.records.length === 0) return null;
     const f = result.records[0].get("f").properties;
     const sms = result.records[0].get("sms").properties;
+    try {
+      await sendSms({ to: sms.to, message: sms.body });
+    } catch (err) {
+      console.warn("[sms] delivery failed (graph node saved):", err.message);
+    }
     return { farmer: f, sms };
   } finally {
     await session.close();
@@ -215,6 +224,138 @@ export async function listPipelineRuns() {
   } finally {
     await session.close();
   }
+}
+
+export async function listAuditLog({ limit = 50, farmerId } = {}) {
+  const session = getDriver().session();
+  const params = { limit: neo4j.int(limit) };
+  let match = `MATCH (f:Farmer)-[:DECIDED]->(a:AuditEntry)`;
+  if (farmerId) {
+    match += ` WHERE f.id = $farmerId OR f.national_id = $farmerId`;
+    params.farmerId = farmerId;
+  }
+  try {
+    const result = await session.run(
+      `${match}
+       RETURN a, f.id AS farmerId, f.name AS farmerName
+       ORDER BY a.timestamp_iso DESC
+       LIMIT $limit`,
+      params,
+    );
+    return result.records.map((r) => {
+      const a = r.get("a").properties;
+      return {
+        id: a.id,
+        farmerId: r.get("farmerId"),
+        farmerName: r.get("farmerName"),
+        officer: a.officer || "Branch Officer",
+        decision: a.decision,
+        stance: a.stance,
+        notes: a.notes || "",
+        score: a.score ?? null,
+        timestampIso: a.timestamp_iso,
+      };
+    });
+  } finally {
+    await session.close();
+  }
+}
+
+export async function listSmsMessages({ phone, farmerId, limit = 50 } = {}) {
+  const session = getDriver().session();
+  const params = { limit: neo4j.int(limit) };
+  let where = "";
+  if (farmerId) {
+    where = `WHERE f.id = $farmerId OR f.national_id = $farmerId`;
+    params.farmerId = farmerId;
+  } else if (phone) {
+    where = `WHERE replace(f.phone_number, ' ', '') = replace($phone, ' ', '')`;
+    params.phone = phone.replace(/\s/g, "");
+  }
+  try {
+    const result = await session.run(
+      `MATCH (f:Farmer)-[:NOTIFIED]->(sms:SmsMessage)
+       ${where}
+       RETURN sms, f.id AS farmerId
+       ORDER BY sms.sent_iso DESC
+       LIMIT $limit`,
+      params,
+    );
+    return result.records.map((r) => {
+      const sms = r.get("sms").properties;
+      return {
+        id: sms.id,
+        farmerId: r.get("farmerId"),
+        to: sms.to,
+        body: sms.body,
+        category: sms.category || "decision",
+        sentIso: sms.sent_iso,
+      };
+    });
+  } finally {
+    await session.close();
+  }
+}
+
+export async function listClimateZones() {
+  const session = getDriver().session();
+  try {
+    const result = await session.run(`MATCH (z:ClimateZone) RETURN z ORDER BY z.id`);
+    return result.records.map((r) => {
+      const z = r.get("z").properties;
+      return {
+        zoneCode: z.id,
+        name: z.name,
+        spi: toNum(z.current_spi_index),
+        rainfallMmLast30d: toNum(z.rainfall_mm_last_30d),
+        pestProximityKm: toNum(z.pest_proximity_km),
+        advisory: z.advisory || null,
+      };
+    });
+  } finally {
+    await session.close();
+  }
+}
+
+export async function getPortfolioStats() {
+  const farmers = await listFarmers();
+  const zones = await listClimateZones();
+
+  const segments = ["Women", "Youth", "PWD", "General"].map((name) => ({
+    name,
+    value: farmers.filter((f) => f.segment === name).length,
+  }));
+
+  const now = Date.now();
+  const weekMs = 7 * 24 * 3600 * 1000;
+  const weekly = Array.from({ length: 8 }, (_, i) => {
+    const weekEnd = now - i * weekMs;
+    const weekStart = weekEnd - weekMs;
+    const label = i === 0 ? "Now" : `W-${i}`;
+    let requested = 0;
+    let sent = 0;
+    for (const f of farmers) {
+      const t = Date.parse(f.submittedIso);
+      if (Number.isNaN(t)) continue;
+      if (t >= weekStart && t < weekEnd) requested += 1;
+      if (f.status === "disbursed" && t >= weekStart && t < weekEnd) sent += 1;
+    }
+    return { w: label, requested, sent };
+  }).reverse();
+
+  return { segments, zones, weekly, total: farmers.length };
+}
+
+export async function getPublicStats() {
+  const farmers = await listFarmers();
+  const zones = await listClimateZones();
+  return {
+    ready: farmers.filter((f) => f.status === "ready_for_review").length,
+    escalated: farmers.filter((f) => f.status === "escalated").length,
+    advisories: zones.filter((z) => z.advisory).length,
+    womenYouth: farmers.filter((f) => f.segment === "Women" || f.segment === "Youth").length,
+    total: farmers.length,
+  };
 }
 
 function toNum(v) {

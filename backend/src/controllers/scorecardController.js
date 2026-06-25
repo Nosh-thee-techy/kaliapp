@@ -1,5 +1,13 @@
 import { calculateGraphScore } from "../services/scoringEngine.js";
-import { listFarmers, recordDecision, listPipelineRuns } from "../services/farmerService.js";
+import {
+  listFarmers,
+  recordDecision,
+  listPipelineRuns,
+  listAuditLog,
+  listSmsMessages,
+  getPortfolioStats,
+  getPublicStats as fetchPublicStats,
+} from "../services/farmerService.js";
 
 export async function getScorecard(req, res) {
   try {
@@ -33,11 +41,13 @@ export async function postDecision(req, res) {
     if (!decision) {
       return res.status(400).json({ error: "decision is required" });
     }
+    const assessment = await calculateGraphScore(req.params.id);
     const result = await recordDecision(req.params.id, {
       decision,
       stance,
       notes,
-      officer,
+      officer: officer || req.officer?.name || "Branch Officer",
+      score: assessment?.aggregate_score ?? assessment?.total ?? null,
     });
     if (!result) {
       return res.status(404).json({ error: "Farmer not found" });
@@ -59,6 +69,53 @@ export async function getPipeline(req, res) {
     return res.json({ runs, fetchedAt: new Date().toISOString() });
   } catch (error) {
     console.error("[pipeline]", error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getAudit(req, res) {
+  try {
+    const entries = await listAuditLog({
+      limit: Number(req.query.limit) || 50,
+      farmerId: req.query.farmerId,
+    });
+    return res.json({ entries, count: entries.length });
+  } catch (error) {
+    console.error("[audit]", error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getSms(req, res) {
+  try {
+    const messages = await listSmsMessages({
+      phone: req.query.phone,
+      farmerId: req.query.farmerId,
+      limit: Number(req.query.limit) || 50,
+    });
+    return res.json({ messages, count: messages.length });
+  } catch (error) {
+    console.error("[sms]", error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getPortfolio(req, res) {
+  try {
+    const stats = await getPortfolioStats();
+    return res.json({ ...stats, fetchedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error("[portfolio]", error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getPublicStats(req, res) {
+  try {
+    const stats = await fetchPublicStats();
+    return res.json(stats);
+  } catch (error) {
+    console.error("[public-stats]", error);
     return res.status(500).json({ error: error.message });
   }
 }
