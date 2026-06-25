@@ -264,6 +264,60 @@ SET f6.national_id = "28774512",
 MERGE (f6)-[:DELIVERS_TO {delivery_years: 5, volume_tons: 5.0}]->(c6);
 MERGE (f6)-[:MEMBER_OF]->(ch6);
 
+// --- Sample branch audit ledger (decision history in graph) ---
+MATCH (f6:Farmer {id: "F-1031"})
+MERGE (a1:AuditEntry {id: "A-9001"})
+SET a1.decision = "Approved",
+    a1.stance = "approve_flexible",
+    a1.notes = "Strong 5y co-op delivery",
+    a1.officer = "Jane Mwangi",
+    a1.score = 78,
+    a1.timestamp_iso = toString(datetime() - duration({hours: 72}))
+MERGE (f6)-[:DECIDED]->(a1)
+WITH f6
+MERGE (sms1:SmsMessage {id: "SMS-2201"})
+SET sms1.to = "+254711223344",
+    sms1.body = "KaLI Rating: 78/100. Approved. KES 50,000 disbursed. Repayment set for December harvest.",
+    sms1.category = "decision",
+    sms1.sent_iso = toString(datetime() - duration({hours: 72}))
+MERGE (f6)-[:NOTIFIED]->(sms1);
+
+MATCH (f2:Farmer {id: "F-1043"})
+SET f2.status = "escalated", f2.last_decision = "Referred"
+MERGE (a2:AuditEntry {id: "A-9002"})
+SET a2.decision = "Referred",
+    a2.stance = "refer_committee",
+    a2.notes = "Awaiting cooperative confirmation",
+    a2.officer = "James Mwangi",
+    a2.score = 54,
+    a2.timestamp_iso = toString(datetime() - duration({hours: 48}))
+MERGE (f2)-[:DECIDED]->(a2)
+WITH f2
+MERGE (sms2:SmsMessage {id: "SMS-2202"})
+SET sms2.to = "+254722110983",
+    sms2.body = "KaLI Rating: 54/100. Referred to regional committee. Your branch officer will contact you.",
+    sms2.category = "decision",
+    sms2.sent_iso = toString(datetime() - duration({hours: 48}))
+MERGE (f2)-[:NOTIFIED]->(sms2);
+
+MATCH (f3:Farmer {id: "F-1044"})
+SET f3.last_decision = "Declined"
+MERGE (a3:AuditEntry {id: "A-9003"})
+SET a3.decision = "Declined",
+    a3.stance = "decline_with_reason",
+    a3.notes = "Drought zone + no co-op affiliation",
+    a3.officer = "Jane Mwangi",
+    a3.score = 38,
+    a3.timestamp_iso = toString(datetime() - duration({hours: 24}))
+MERGE (f3)-[:DECIDED]->(a3)
+WITH f3
+MERGE (sms3:SmsMessage {id: "SMS-2203"})
+SET sms3.to = "+254733776201",
+    sms3.body = "KaLI Rating: 38/100. Application declined. Contact your branch officer for details.",
+    sms3.category = "decision",
+    sms3.sent_iso = toString(datetime() - duration({hours: 24}))
+MERGE (f3)-[:NOTIFIED]->(sms3);
+
 // --- Pipeline run nodes (sync console) ---
 MERGE (pr1:PipelineRun {source: "CHIRPS Rainfall Grids"})
 SET pr1.status = "ok", pr1.message = "12 zones refreshed", pr1.last_run_iso = toString(datetime() - duration({hours: 4}));

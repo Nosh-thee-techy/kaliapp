@@ -102,7 +102,8 @@ export async function recordDecision(lookup, { decision, stance, notes, officer,
   `;
 
   const scoreHint = decision === "Approved" ? "Approved" : decision;
-  const smsBody = `KaLI Rating update. ${scoreHint}. ${notes ? notes.slice(0, 80) : "Contact your branch officer for details."}`;
+  const scorePart = score != null ? `KaLI Rating: ${score}/100. ` : "";
+  const smsBody = `${scorePart}${scoreHint}. ${notes ? notes.slice(0, 80) : "Contact your branch officer for details."}`;
 
   try {
     const result = await session.run(cypher, {
@@ -165,7 +166,19 @@ export async function registerFarmerFromUssd({
       MERGE (f)-[d:DELIVERS_TO]->(coop)
       ON CREATE SET d.delivery_years = 0, d.volume_tons = 0
     )
-    RETURN f
+    WITH f, coop
+    OPTIONAL MATCH (coop)-[:OPERATES_IN]->(zone:ClimateZone)
+    WITH f, zone
+    SET f.status = CASE WHEN zone IS NOT NULL THEN "ready_for_review" ELSE "awaiting_climate" END
+    CREATE (sms:SmsMessage {
+      id: randomUUID(),
+      to: f.phone_number,
+      body: "KaLI: Registration received. Your application is in the branch queue for graph review.",
+      category: "registration",
+      sent_iso: toString(datetime())
+    })
+    CREATE (f)-[:NOTIFIED]->(sms)
+    RETURN f, sms
   `;
 
   try {
@@ -179,7 +192,14 @@ export async function registerFarmerFromUssd({
       requestedKes: requestedKes ? Number(requestedKes) : 35000,
     });
     if (result.records.length === 0) return null;
-    return result.records[0].get("f").properties;
+    const farmer = result.records[0].get("f").properties;
+    const sms = result.records[0].get("sms").properties;
+    try {
+      await sendSms({ to: sms.to, message: sms.body });
+    } catch (err) {
+      console.warn("[sms] registration notify failed (graph node saved):", err.message);
+    }
+    return farmer;
   } finally {
     await session.close();
   }
