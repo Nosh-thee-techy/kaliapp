@@ -7,7 +7,7 @@
 | Field | Value |
 |-------|-------|
 | **Project Name** | KaLI — Kenya Agri Lending Intelligence |
-| **Team Name** | *[Team Technitians]* |
+| **Team Name** | *Technitians* |
 | **Selected Challenge Brief** | Climate-smart, inclusive agricultural credit for East African smallholders (graph-native underwriting & field-verified advisory) |
 | **Prototype** | https://kali-lending.vercel.app |
 | **Source** | https://github.com/Nosh-thee-techy/kaliapp |
@@ -109,6 +109,6 @@ Neo4j improves **decision quality** (fairer scores for leaseholding women farmer
 
 ---
 
-**Before submitting:** Ensure this document matches the prototype (https://kali-lending.vercel.app), GitHub source, and Neo4j technical proof video (live Cypher in Aura Browser + scorecard driver walkthrough).
+
 
 *Template: Kenya AI Challenge — Neo4j Track. KaLI team submission.*
