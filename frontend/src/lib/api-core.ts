@@ -163,17 +163,19 @@ export type PublicStats = {
 };
 
 const DEFAULT_API = "http://localhost:4000";
+const PRODUCTION_API = "https://kaliapp-api.onrender.com";
 
-/** Local dev: hit Express directly (CORS allows localhost:3000). Prod: VITE_API_CORE_URL. */
+/** Local dev → localhost:4000. Vercel/prod → VITE_API_CORE_URL or known Render URL. */
 function getApiBase(): string {
+  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_CORE_URL) {
+    return String(import.meta.env.VITE_API_CORE_URL).replace(/\/$/, "");
+  }
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
     if (host === "localhost" || host === "127.0.0.1") {
-      return "http://localhost:4000";
+      return DEFAULT_API;
     }
-  }
-  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_CORE_URL) {
-    return String(import.meta.env.VITE_API_CORE_URL).replace(/\/$/, "");
+    return PRODUCTION_API;
   }
   return DEFAULT_API;
 }
@@ -210,28 +212,53 @@ async function authFetch<T>(path: string, body: object): Promise<T> {
 
 export async function graphFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? getAuthToken() : null;
-  const res = await fetch(apiPath(path), {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Graph API ${res.status}`);
+  const timeoutMs = path.includes("/readiness/") ? 120_000 : 45_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(apiPath(path), {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `Graph API ${res.status}`);
+    }
+    return res.json() as Promise<T>;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      const onProd = typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname);
+      throw new Error(
+        onProd
+          ? "API timed out — Render may be waking up (free tier). Wait 30s and retry."
+          : "API timed out. Run: cd backend && npm run dev",
+      );
+    }
+    if (err instanceof TypeError && String(err.message).includes("fetch")) {
+      const base = getApiBase();
+      throw new Error(`Cannot reach API at ${base}. Check backend deploy and CORS.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json() as Promise<T>;
 }
 
 export async function fetchGraphHealth(): Promise<boolean> {
-  try {
-    const data = await graphFetch<{ status: string }>("/api/health");
-    return data.status === "ok";
-  } catch {
-    return false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const data = await graphFetch<{ status: string }>("/api/health");
+      if (data.status === "ok") return true;
+    } catch {
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 3000));
+    }
   }
+  return false;
 }
 
 export async function fetchGraphFarmers(params?: {

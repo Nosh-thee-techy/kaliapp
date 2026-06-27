@@ -6,7 +6,7 @@ import ussdRoutes from "./src/routes/ussd.js";
 import { verifyConnectivity, closeDriver } from "./src/config/neo4j.js";
 
 const app = express();
-const PORT = Number(process.env.API_CORE_PORT) || 4000;
+const PORT = Number(process.env.PORT) || Number(process.env.API_CORE_PORT) || 4000;
 
 const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
