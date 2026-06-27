@@ -14,7 +14,7 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { TrendingUp, Users, CloudRain, ArrowRight } from "lucide-react";
+import { TrendingUp, Users, CloudRain, ArrowRight, ClipboardPlus } from "lucide-react";
 import {
   farmers as mockFarmers,
   STATUS_META,
@@ -24,7 +24,9 @@ import {
   type DemographicSegment,
   type Farmer,
 } from "@/lib/mock-data";
-import { fetchGraphFarmers, fetchPortfolioStats } from "@/lib/api-core";
+import { fetchGraphFarmers, fetchPortfolioStats, postOfficerIngest, mapGraphFarmerToDashboard } from "@/lib/api-core";
+import { getOfficer } from "@/lib/officer-session";
+import { toast } from "sonner";
 import type { PortfolioStats } from "@/lib/api-core";
 import { useI18n } from "@/lib/i18n";
 import { requireOfficerSession } from "@/lib/require-officer";
@@ -55,19 +57,63 @@ function DashboardPage() {
   const [graphLive, setGraphLive] = useState(false);
   const [portfolio, setPortfolio] = useState<PortfolioStats | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  const [intakeLoading, setIntakeLoading] = useState(false);
+  const [intakeForm, setIntakeForm] = useState({
+    phone: "",
+    nationalId: "",
+    coopCode: "",
+    cropType: "Maize",
+    acreage: "1",
+    notes: "",
+  });
 
-  useEffect(() => {
+  const refreshQueue = useCallback(() => {
     fetchGraphFarmers({ status: "all", segment: "All" })
       .then((rows) => {
-        setQueue(rows as unknown as Farmer[]);
+        setQueue(rows.map(mapGraphFarmerToDashboard));
         setGraphLive(true);
       })
       .catch(() => setGraphLive(false));
+  }, []);
+
+  useEffect(() => {
+    refreshQueue();
 
     fetchPortfolioStats()
       .then(setPortfolio)
       .catch(() => setPortfolio(null));
-  }, []);
+  }, [refreshQueue]);
+
+  async function submitOfficerIntake(e: React.FormEvent) {
+    e.preventDefault();
+    setIntakeLoading(true);
+    try {
+      const result = await postOfficerIngest({
+        phone: intakeForm.phone,
+        nationalId: intakeForm.nationalId || undefined,
+        coopCode: intakeForm.coopCode || undefined,
+        cropType: intakeForm.cropType,
+        acreage: Number(intakeForm.acreage) || 1,
+        text: intakeForm.notes || `${intakeForm.cropType} ${intakeForm.acreage} acres`,
+        lang: "en",
+        requestedKes: 35000,
+        officerId: getOfficer()?.name,
+      });
+      toast.success(
+        result.approved
+          ? `Approved · Grow Asia ${Math.round((result.systemScore?.systemScore ?? 0) * 100)}%`
+          : `Submitted · ${result.state || "processing"}`,
+      );
+      setIntakeForm({ phone: "", nationalId: "", coopCode: "", cropType: "Maize", acreage: "1", notes: "" });
+      setIntakeOpen(false);
+      refreshQueue();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Intake failed");
+    } finally {
+      setIntakeLoading(false);
+    }
+  }
 
   const counts = useMemo(() => {
     const c: Record<ApplicationStatus, number> = {
@@ -178,6 +224,46 @@ function DashboardPage() {
       {/* CHARTS */}
       <PortfolioCharts queue={queue} portfolio={portfolio} graphLive={graphLive} />
 
+      {/* OFFICER FIELD INTAKE */}
+      <section className="mt-10 rounded-2xl border border-border bg-card p-6 shadow-card">
+        <button
+          type="button"
+          onClick={() => setIntakeOpen((o) => !o)}
+          className="flex w-full items-center justify-between gap-4 text-left"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <ClipboardPlus className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-display text-xl font-semibold text-foreground">Field intake</h2>
+              <p className="text-sm text-muted-foreground">
+                Register a farmer from the branch — routes through unified ingest pipeline
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-medium text-primary">{intakeOpen ? "Hide" : "Open"}</span>
+        </button>
+
+        {intakeOpen && (
+          <form onSubmit={submitOfficerIntake} className="mt-6 grid gap-4 sm:grid-cols-2">
+            <IntakeField label="Phone (254…)" value={intakeForm.phone} onChange={(v) => setIntakeForm((f) => ({ ...f, phone: v }))} required />
+            <IntakeField label="National ID" value={intakeForm.nationalId} onChange={(v) => setIntakeForm((f) => ({ ...f, nationalId: v }))} />
+            <IntakeField label="Cooperative code" value={intakeForm.coopCode} onChange={(v) => setIntakeForm((f) => ({ ...f, coopCode: v }))} placeholder="COOP-NVS-04" />
+            <IntakeField label="Crop" value={intakeForm.cropType} onChange={(v) => setIntakeForm((f) => ({ ...f, cropType: v }))} />
+            <IntakeField label="Acreage" value={intakeForm.acreage} onChange={(v) => setIntakeForm((f) => ({ ...f, acreage: v }))} type="number" />
+            <IntakeField label="Notes / transcript" value={intakeForm.notes} onChange={(v) => setIntakeForm((f) => ({ ...f, notes: v }))} className="sm:col-span-2" />
+            <button
+              type="submit"
+              disabled={intakeLoading || !intakeForm.phone}
+              className="sm:col-span-2 inline-flex items-center justify-center rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+            >
+              {intakeLoading ? "Processing…" : "Submit to ingest pipeline"}
+            </button>
+          </form>
+        )}
+      </section>
+
       {/* QUEUE */}
       <section className="mt-12">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -261,8 +347,8 @@ function DashboardPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${SEGMENT_META[f.segment].tone}`}>
-                  {SEGMENT_META[f.segment].label}
+                <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${(SEGMENT_META[f.segment] ?? SEGMENT_META.General).tone}`}>
+                  {(SEGMENT_META[f.segment] ?? SEGMENT_META.General).label}
                 </span>
                 <span className="text-xs text-muted-foreground">{f.cooperative}</span>
               </div>
@@ -273,7 +359,7 @@ function DashboardPage() {
                   KES {f.requestedKes.toLocaleString()}
                 </div>
                 <div className="mt-1 inline-flex items-center gap-1.5">
-                  <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META[f.status].dot}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${(STATUS_META[f.status] ?? STATUS_META.ready_for_review).dot}`} />
                   <span className="text-[11px] font-medium text-muted-foreground">
                     {friendlyStatus[f.status]}
                   </span>
@@ -508,5 +594,37 @@ function PortfolioCharts({
         </ResponsiveContainer>
       </div>
     </section>
+  );
+}
+
+function IntakeField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  required,
+  placeholder,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <label className={className}>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <input
+        type={type}
+        required={required}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1.5 w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+      />
+    </label>
   );
 }

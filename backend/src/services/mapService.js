@@ -1,21 +1,11 @@
 import { getDriver } from "../config/neo4j.js";
+import { ALL_ZONE_COORDS, EAST_AFRICA_MAP_BOUNDS } from "../config/zoneCoords.js";
+import { fetchZoneWeather } from "./weatherService.js";
 
-/** Zone centroids on a 1000×700 canvas (Rift Valley / Kenya hub layout). */
-const ZONE_COORDS = {
-  "KE-RIFT-04": { x: 520, y: 380, label: "Nakuru" },
-  "KE-RIFT-02": { x: 480, y: 320, label: "Uasin Gishu" },
-  "KE-NE-01": { x: 720, y: 480, label: "Garissa" },
-  "KE-NYZ-03": { x: 550, y: 450, label: "Nyandarua" },
-  "KE-CEN-01": { x: 500, y: 400, label: "Central" },
-  "KE-EAS-02": { x: 600, y: 420, label: "Eastern" },
-};
-
-const DEFAULT_HUB = { x: 540, y: 400, label: "Kenya" };
-
-function jitter(id, axis) {
+function jitterDeg(id, axis) {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  const spread = axis === "x" ? 80 : 60;
+  const spread = axis === "lat" ? 0.06 : 0.08;
   return ((Math.abs(h) % 1000) / 1000 - 0.5) * spread;
 }
 
@@ -65,7 +55,7 @@ export async function getMapFarmersData() {
 
   try {
     const result = await session.run(cypher);
-    const chamaClusters = new Map();
+    const chamaClusters = new globalThis.Map();
     const farmers = [];
 
     for (const record of result.records) {
@@ -79,7 +69,7 @@ export async function getMapFarmersData() {
         (Number(record.get("guaranteeCount")) || 0);
 
       const zoneCode = zone?.id || "KE-RIFT-04";
-      const hub = ZONE_COORDS[zoneCode] || DEFAULT_HUB;
+      const hub = ALL_ZONE_COORDS[zoneCode] || ALL_ZONE_COORDS["KE-RIFT-04"];
       const farmerId = f.id || f.national_id;
 
       const scores = growAsiaFromRecord({
@@ -90,16 +80,17 @@ export async function getMapFarmersData() {
         guaranteeCount,
       });
 
-      const x = hub.x + jitter(farmerId, "x");
-      const y = hub.y + jitter(farmerId, "y");
+      const lat = hub.lat + jitterDeg(farmerId, "lat");
+      const lng = hub.lon + jitterDeg(farmerId, "lng");
 
       if (ch?.id) {
         if (!chamaClusters.has(ch.id)) {
           chamaClusters.set(ch.id, {
             id: ch.id,
             name: ch.name || ch.id,
-            x: hub.x + jitter(ch.id, "x") * 0.3,
-            y: hub.y + jitter(ch.id, "y") * 0.3 - 40,
+            lat: hub.lat + jitterDeg(ch.id, "lat") * 0.25,
+            lng: hub.lon + jitterDeg(ch.id, "lng") * 0.25,
+            zone_code: zoneCode,
           });
         }
       }
@@ -115,19 +106,122 @@ export async function getMapFarmersData() {
         chama_id: ch?.id || null,
         chama_name: ch?.name || null,
         zone_code: zoneCode,
-        zone_name: zone?.name || hub.label,
-        x,
-        y,
+        zone_name: zone?.name || hub.name,
+        lat,
+        lng,
         systemScore: scores.systemScore,
         riskTier: scores.riskTier,
         spi: scores.spi,
       });
     }
 
+    const zones = Object.entries(ALL_ZONE_COORDS).map(([id, c]) => ({
+      id,
+      label: c.name,
+      lat: c.lat,
+      lng: c.lon,
+      radiusKm: c.radiusKm,
+      farmerCount: farmers.filter((f) => f.zone_code === id).length,
+    }));
+
     return {
       farmers,
       chamas: [...chamaClusters.values()],
-      zones: Object.entries(ZONE_COORDS).map(([id, c]) => ({ id, ...c })),
+      zones,
+      bounds: EAST_AFRICA_MAP_BOUNDS,
+      fetchedAt: new Date().toISOString(),
+    };
+  } finally {
+    await session.close();
+  }
+}
+
+export async function getZoneAnalytics(zoneId) {
+  const session = getDriver().session();
+
+  try {
+    const zoneResult = await session.run(
+      `
+      MATCH (z:ClimateZone {id: $zoneId})
+      OPTIONAL MATCH (coop:Cooperative)-[:OPERATES_IN]->(z)
+      OPTIONAL MATCH (f:Farmer)-[:DELIVERS_TO]->(coop)
+      OPTIONAL MATCH (f)-[:MEMBER_OF]->(ch:Chama)
+      RETURN z,
+             count(DISTINCT f) AS farmerCount,
+             count(DISTINCT coop) AS coopCount,
+             count(DISTINCT ch) AS chamaCount
+    `,
+      { zoneId },
+    );
+
+    if (zoneResult.records.length === 0) {
+      return null;
+    }
+
+    const r = zoneResult.records[0];
+    const z = r.get("z").properties;
+    const coords = ALL_ZONE_COORDS[zoneId] || ALL_ZONE_COORDS["KE-RIFT-04"];
+
+    const farmersResult = await session.run(
+      `
+      MATCH (z:ClimateZone {id: $zoneId})<-[:OPERATES_IN]-(coop:Cooperative)<-[:DELIVERS_TO]-(f:Farmer)
+      RETURN f.id AS id, f.name AS name, f.status AS status, f.underwriting_state AS state,
+             f.crop_type AS crop
+      LIMIT 50
+    `,
+      { zoneId },
+    );
+
+    const farmersList = farmersResult.records.map((rec) => ({
+      id: rec.get("id"),
+      name: rec.get("name"),
+      status: rec.get("status"),
+      underwriting_state: rec.get("state"),
+      crop_type: rec.get("crop"),
+    }));
+
+    const mapData = await getMapFarmersData();
+    const zoneFarmers = mapData.farmers.filter((f) => f.zone_code === zoneId);
+    const approved = zoneFarmers.filter((f) => f.riskTier === "green").length;
+    const atRisk = zoneFarmers.filter((f) => f.riskTier === "red").length;
+    const avgScore =
+      zoneFarmers.length > 0
+        ? Math.round(
+            (zoneFarmers.reduce((s, f) => s + (f.systemScore || 0), 0) / zoneFarmers.length) * 1000,
+          ) / 1000
+        : 0;
+
+    const weather = await fetchZoneWeather(zoneId);
+
+    return {
+      zoneId,
+      name: z.name || coords.name,
+      lat: coords.lat,
+      lng: coords.lon,
+      radiusKm: coords.radiusKm,
+      climate: {
+        spi: Number(z.current_spi_index) || 0,
+        rainfallMm30d: Number(z.rainfall_mm_last_30d) || 0,
+        pestProximityKm: Number(z.pest_proximity_km) || 0,
+        advisory: z.advisory || null,
+        lastSyncIso: z.last_sync_iso || null,
+      },
+      weather,
+      analytics: {
+        farmerCount: r.get("farmerCount")?.toNumber?.() ?? zoneFarmers.length,
+        cooperativeCount: r.get("coopCount")?.toNumber?.() ?? 0,
+        chamaCount: r.get("chamaCount")?.toNumber?.() ?? 0,
+        approved,
+        atRisk,
+        needsReview: zoneFarmers.length - approved - atRisk,
+        avgGrowAsiaScore: avgScore,
+        riskBreakdown: {
+          green: approved,
+          amber: zoneFarmers.filter((f) => f.riskTier === "amber").length,
+          red: atRisk,
+        },
+      },
+      farmers: farmersList.length ? farmersList : zoneFarmers.slice(0, 20),
       fetchedAt: new Date().toISOString(),
     };
   } finally {

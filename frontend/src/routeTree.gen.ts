@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ReadinessRouteImport } from './routes/readiness'
 import { Route as PartnersRouteImport } from './routes/partners'
 import { Route as MapRouteImport } from './routes/map'
 import { Route as LogsRouteImport } from './routes/logs'
@@ -22,6 +23,11 @@ import { Route as FarmersIdRouteImport } from './routes/farmers.$id'
 import { Route as ApiUssdCallbackRouteImport } from './routes/api/ussd-callback'
 import { Route as ApiClimateRouteImport } from './routes/api/climate'
 
+const ReadinessRoute = ReadinessRouteImport.update({
+  id: '/readiness',
+  path: '/readiness',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PartnersRoute = PartnersRouteImport.update({
   id: '/partners',
   path: '/partners',
@@ -92,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/logs': typeof LogsRoute
   '/map': typeof MapRoute
   '/partners': typeof PartnersRoute
+  '/readiness': typeof ReadinessRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
   '/farmers/$id': typeof FarmersIdRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/logs': typeof LogsRoute
   '/map': typeof MapRoute
   '/partners': typeof PartnersRoute
+  '/readiness': typeof ReadinessRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
   '/farmers/$id': typeof FarmersIdRoute
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/logs': typeof LogsRoute
   '/map': typeof MapRoute
   '/partners': typeof PartnersRoute
+  '/readiness': typeof ReadinessRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
   '/farmers/$id': typeof FarmersIdRoute
@@ -137,6 +146,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/map'
     | '/partners'
+    | '/readiness'
     | '/api/climate'
     | '/api/ussd-callback'
     | '/farmers/$id'
@@ -151,6 +161,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/map'
     | '/partners'
+    | '/readiness'
     | '/api/climate'
     | '/api/ussd-callback'
     | '/farmers/$id'
@@ -165,6 +176,7 @@ export interface FileRouteTypes {
     | '/logs'
     | '/map'
     | '/partners'
+    | '/readiness'
     | '/api/climate'
     | '/api/ussd-callback'
     | '/farmers/$id'
@@ -180,6 +192,7 @@ export interface RootRouteChildren {
   LogsRoute: typeof LogsRoute
   MapRoute: typeof MapRoute
   PartnersRoute: typeof PartnersRoute
+  ReadinessRoute: typeof ReadinessRoute
   ApiClimateRoute: typeof ApiClimateRoute
   ApiUssdCallbackRoute: typeof ApiUssdCallbackRoute
   FarmersIdRoute: typeof FarmersIdRoute
@@ -188,6 +201,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/readiness': {
+      id: '/readiness'
+      path: '/readiness'
+      fullPath: '/readiness'
+      preLoaderRoute: typeof ReadinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/partners': {
       id: '/partners'
       path: '/partners'
@@ -284,6 +304,7 @@ const rootRouteChildren: RootRouteChildren = {
   LogsRoute: LogsRoute,
   MapRoute: MapRoute,
   PartnersRoute: PartnersRoute,
+  ReadinessRoute: ReadinessRoute,
   ApiClimateRoute: ApiClimateRoute,
   ApiUssdCallbackRoute: ApiUssdCallbackRoute,
   FarmersIdRoute: FarmersIdRoute,

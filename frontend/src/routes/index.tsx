@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Sprout, Smartphone, CloudRain, Scale, ShieldCheck, Sparkles, ArrowRight, Bug, Users, Banknote, Leaf } from "lucide-react";
+import { Sprout, Smartphone, CloudRain, Scale, ShieldCheck, Sparkles, ArrowRight, Bug, Users, Banknote, Leaf, Target, Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { farmers as mockFarmers, climateSignals } from "@/lib/mock-data";
 import { fetchPublicStats } from "@/lib/api-core";
@@ -78,15 +78,24 @@ function LandingPage() {
           </Link>
           <nav className="hidden items-center gap-1 text-sm text-primary-foreground/80 md:flex">
             <a href="#what" className="rounded-md px-3 py-1.5 hover:text-primary-foreground">What it is</a>
+            <a href="#readiness" className="rounded-md px-3 py-1.5 hover:text-primary-foreground">My readiness</a>
             <a href="#how" className="rounded-md px-3 py-1.5 hover:text-primary-foreground">How it works</a>
             <a href="#impact" className="rounded-md px-3 py-1.5 hover:text-primary-foreground">Impact</a>
           </nav>
-          <Link
-            to="/auth"
-            className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground shadow-glow transition-transform hover:scale-[1.02]"
-          >
-            Officer sign in <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/readiness"
+              className="hidden rounded-full border border-primary-foreground/25 bg-primary-foreground/10 px-4 py-2 text-sm font-medium text-primary-foreground backdrop-blur hover:bg-primary-foreground/15 sm:inline-flex"
+            >
+              Farmers
+            </Link>
+            <Link
+              to="/auth"
+              className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground shadow-glow transition-transform hover:scale-[1.02]"
+            >
+              Officer sign in <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -110,10 +119,16 @@ function LandingPage() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
-                to="/auth"
+                to="/readiness"
                 className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground shadow-glow transition-transform hover:scale-[1.02]"
               >
-                Open the branch portal <ArrowRight className="h-4 w-4" />
+                Check my readiness <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link
+                to="/auth"
+                className="inline-flex items-center gap-2 rounded-full border border-primary-foreground/25 bg-primary-foreground/5 px-5 py-3 text-sm font-medium text-primary-foreground backdrop-blur hover:bg-primary-foreground/10"
+              >
+                Officer portal
               </Link>
               <a
                 href="#how"
@@ -133,6 +148,45 @@ function LandingPage() {
           </div>
 
           <PhoneMock />
+        </div>
+      </section>
+
+      {/* FARMER READINESS */}
+      <section id="readiness" className="border-y border-border bg-[oklch(0.98_0.015_135)] py-24">
+        <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-2">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">
+              <Target className="h-3.5 w-3.5" />
+              For farmers · Kenya & Uganda
+            </span>
+            <h2 className="mt-4 font-display text-4xl font-semibold leading-tight text-foreground sm:text-5xl">
+              Your readiness,
+              <span className="block text-primary">in one place.</span>
+            </h2>
+            <p className="mt-4 max-w-lg text-base text-muted-foreground">
+              Tea farmers enter a KTDA number. Everyone else uses their society ID or phone. No app install, no password —
+              just your member number and the action steps we already send by SMS, saved as a simple checklist.
+            </p>
+            <ul className="mt-6 space-y-3">
+              {[
+                "See your credit readiness score (0–100)",
+                "Get your next step in English, Kiswahili, or Luganda",
+                "Tick off action points as you complete them",
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2.5 text-sm text-foreground">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <Link
+              to="/readiness"
+              className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-glow transition-transform hover:scale-[1.02]"
+            >
+              Open My Readiness <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <ReadinessPreview />
         </div>
       </section>
 
@@ -329,6 +383,76 @@ function PhoneMock() {
             <span>Reply HELP for officer</span>
             <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> live</span>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReadinessPreview() {
+  const actions = [
+    { done: true, text: "Deliver tea to your society this season" },
+    { done: false, text: "Save with your chama every month" },
+    { done: false, text: "Keep M-Pesa records active" },
+  ];
+  const done = actions.filter((a) => a.done).length;
+
+  return (
+    <div className="relative mx-auto w-full max-w-sm">
+      <div className="absolute -inset-4 rounded-[2rem] bg-primary/10 blur-2xl" />
+      <div className="relative overflow-hidden rounded-[2rem] border border-border/80 bg-white shadow-elevated">
+        <div className="bg-gradient-to-br from-primary/10 via-white to-accent/10 px-6 pt-8 pb-6 text-center">
+          <p className="text-xs text-muted-foreground">James Mburu · Tea</p>
+          <div className="relative mx-auto mt-4 h-32 w-32">
+            <svg className="h-full w-full -rotate-90" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="oklch(0.94 0.02 135)" strokeWidth="8" />
+              <circle
+                cx="60"
+                cy="60"
+                r="50"
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeDasharray={314}
+                strokeDashoffset={314 - (46 / 100) * 314}
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="font-display text-4xl font-semibold text-foreground">46</span>
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">/ 100</span>
+            </div>
+          </div>
+          <span className="mt-2 inline-flex rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
+            Building trust
+          </span>
+        </div>
+        <div className="border-t border-border/60 bg-muted/20 px-5 py-4">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-accent">Your next step</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-foreground">
+            Keep delivering to your co-op — lenders see every season you show up.
+          </p>
+        </div>
+        <div className="px-5 py-4">
+          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span>Action points</span>
+            <span>{done}/{actions.length}</span>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {actions.map((a, i) => (
+              <li
+                key={i}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
+                  a.done ? "border-success/30 bg-success/8 text-muted-foreground line-through" : "border-border bg-background"
+                }`}
+              >
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${a.done ? "bg-success text-white" : "bg-primary/10 text-primary"}`}>
+                  {a.done ? "✓" : i + 1}
+                </span>
+                {a.text}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </div>

@@ -7,6 +7,7 @@ import neo4j from "neo4j-driver";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const seedPath = join(__dirname, "../../database/seed.cypher");
 const extraSeedPath = join(__dirname, "../../database/seed-extra.cypher");
+const ugandaSeedPath = join(__dirname, "../../database/seed-uganda.cypher");
 
 const uri = process.env.NEO4J_URI || "bolt://localhost:7687";
 const user = process.env.NEO4J_USER || "neo4j";
@@ -81,12 +82,25 @@ async function main() {
     // Build variable map from ALL statements across both files
     const mainStatements = splitStatements(stripComments(readFileSync(seedPath, "utf8")));
     const extraStatements = splitStatements(stripComments(readFileSync(extraSeedPath, "utf8")));
-    const allStatements = [...mainStatements, ...extraStatements];
+    const ugandaStatements = splitStatements(stripComments(readFileSync(ugandaSeedPath, "utf8")));
+    const allStatements = [...mainStatements, ...extraStatements, ...ugandaStatements];
     const varMap = buildVarMap(allStatements);
     console.log(`[seed] Variable map: ${Object.keys(varMap).length} entries`);
 
     await runFile(driver, seedPath, varMap);
     await runFile(driver, extraSeedPath, varMap);
+    await runFile(driver, ugandaSeedPath, varMap);
+
+    const repairPath = join(__dirname, "../../database/seed-repair.cypher");
+    console.log("[seed] Running graph repair (chama links, Grow Asia fields)…");
+    await runFile(driver, repairPath, varMap);
+
+    const chamaLinks = await driver.executeQuery(
+      "MATCH (:Farmer)-[:MEMBER_OF]->(:Chama) RETURN count(*) AS n",
+      {},
+      { database: "neo4j" },
+    );
+    console.log(`[seed] Chama MEMBER_OF links: ${chamaLinks.records[0].get("n").toNumber()}`);
 
     const count = await driver.executeQuery("MATCH (f:Farmer) RETURN count(f) AS n", {}, { database: "neo4j" });
     const farmers = count.records[0].get("n").toNumber();

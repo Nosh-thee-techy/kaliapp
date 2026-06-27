@@ -219,6 +219,15 @@ export async function registerFarmerFromUssd({
     )
     WITH f, coop
     OPTIONAL MATCH (coop)-[:OPERATES_IN]->(zone:ClimateZone)
+    OPTIONAL MATCH (f)-[:MEMBER_OF]->(memberCh:Chama)
+    OPTIONAL MATCH (ch:Chama)
+    WHERE memberCh IS NULL
+    WITH f, zone, memberCh, ch
+    ORDER BY ch.id
+    WITH f, zone, memberCh, head(collect(ch)) AS defaultChama
+    FOREACH (_ IN CASE WHEN memberCh IS NULL AND defaultChama IS NOT NULL THEN [1] ELSE [] END |
+      MERGE (f)-[:MEMBER_OF]->(defaultChama)
+    )
     WITH f, zone
     SET f.status = CASE WHEN zone IS NOT NULL THEN "ready_for_review" ELSE "awaiting_climate" END
     CREATE (sms:SmsMessage {

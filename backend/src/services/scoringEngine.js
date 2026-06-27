@@ -203,12 +203,23 @@ export async function calculateGraphScore(lookup) {
         points: -10,
         detail: `Active infestation tracked within ${pestKm}km of zone`,
       });
-    } else if (pestKm < 25) {
+    } else     if (pestKm < 25) {
       score -= 8;
       drags.push({
         label: "Pest proximity warning",
         points: -8,
         detail: `Outbreak within ${pestKm}km of zone`,
+      });
+    }
+
+    const { getMitigationBonus } = await import("./groundTruthService.js");
+    const mitigation = await getMitigationBonus(farmer.id);
+    if (mitigation.bonusPoints > 0) {
+      score += mitigation.bonusPoints;
+      drivers.push({
+        label: "Ground-truth mitigation verified",
+        points: mitigation.bonusPoints,
+        detail: `Macro advisory issued; ${mitigation.verifiedCount} field action(s) confirmed on the ground`,
       });
     }
 
@@ -267,6 +278,7 @@ export async function calculateGraphScore(lookup) {
         is_guaranteed: isGuaranteed,
         cooperative_id: coop.id,
       },
+      ground_truth: mitigation,
     };
   } finally {
     await session.close();

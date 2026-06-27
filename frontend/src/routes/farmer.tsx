@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { formatRelative } from "@/lib/mock-data";
-import { fetchSmsMessages, postUssdSession } from "@/lib/api-core";
-import type { SmsMessage } from "@/lib/api-core";
+import { fetchSmsMessages, postUssdSession, postAgentChat, fetchAgentLanguages } from "@/lib/api-core";
+import type { AgentLanguage, SmsMessage } from "@/lib/api-core";
+import { Bot, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/farmer")({
   head: () => ({
@@ -30,6 +31,21 @@ function FarmerPage() {
   const [sessionEnded, setSessionEnded] = useState(false);
   const [smsList, setSmsList] = useState<SmsMessage[]>([]);
   const [smsLive, setSmsLive] = useState(false);
+  const [agentLang, setAgentLang] = useState("sw");
+  const [agentInput, setAgentInput] = useState("");
+  const [agentReply, setAgentReply] = useState<string | null>(null);
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [languages, setLanguages] = useState<AgentLanguage[]>([
+    { code: "en", label: "English" },
+    { code: "sw", label: "Kiswahili" },
+    { code: "lg", label: "Luganda" },
+  ]);
+
+  useEffect(() => {
+    fetchAgentLanguages()
+      .then((r) => setLanguages(r.languages))
+      .catch(() => {});
+  }, []);
 
   const loadSms = useCallback(() => {
     fetchSmsMessages({ phone: phoneNumber, limit: 20 })
@@ -114,6 +130,25 @@ function FarmerPage() {
   function backspace() {
     if (!dialed) setDial((d) => d.slice(0, -1));
     else setInput((v) => v.slice(0, -1));
+  }
+
+  async function askAgent() {
+    if (!agentInput.trim()) return;
+    setAgentLoading(true);
+    setAgentReply(null);
+    try {
+      const res = await postAgentChat({
+        message: agentInput.trim(),
+        lookup: phoneNumber,
+        lang: agentLang,
+        mode: "auto",
+      });
+      setAgentReply(res.reply);
+    } catch {
+      setAgentReply("Agent unavailable. Is the backend running?");
+    } finally {
+      setAgentLoading(false);
+    }
   }
 
   return (
@@ -234,8 +269,9 @@ function FarmerPage() {
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {[
                 { code: "1", label: "Register / Request Credit", desc: "Writes Farmer node + coop link in Neo4j" },
-                { code: "2", label: "Check Loan Status", desc: "Live graph score from backend" },
+                { code: "2", label: "Check Loan Status", desc: "Featherless ≤160 char explainer in your language" },
                 { code: "3", label: "Climate Advisory", desc: "Zone advisory via Cooperative → ClimateZone path" },
+                { code: "4", label: "Explain My Score", desc: "Privacy-safe action step — no ML jargon on screen" },
               ].map((m) => (
                 <div key={m.code} className="rounded-lg border border-border bg-background p-3">
                   <div className="flex items-baseline gap-2">
@@ -246,6 +282,53 @@ function FarmerPage() {
                 </div>
               ))}
             </div>
+          </section>
+
+          <section className="rounded-2xl border border-border bg-card p-6 shadow-card">
+            <div className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              <h2 className="font-display text-lg font-semibold text-foreground">KaLI Agent (Featherless)</h2>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Same explainability engine as USSD — localized, ≤160 characters, action-oriented. English, Kiswahili, or Luganda.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {languages.map((l) => (
+                <button
+                  key={l.code}
+                  type="button"
+                  onClick={() => setAgentLang(l.code)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium ${
+                    agentLang === l.code ? "bg-primary text-primary-foreground" : "border border-border bg-background"
+                  }`}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <input
+                value={agentInput}
+                onChange={(e) => setAgentInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && askAgent()}
+                placeholder="Ask in Swahili, Luganda, or English…"
+                className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={askAgent}
+                disabled={agentLoading}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+              >
+                {agentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ask"}
+              </button>
+            </div>
+            {agentReply && (
+              <div className="mt-4 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3 text-sm">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Farmer-facing reply · {agentReply.length} chars</p>
+                <p className="mt-1 text-foreground">{agentReply}</p>
+              </div>
+            )}
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-6 shadow-card">
@@ -289,6 +372,7 @@ function CategoryPill({ cat }: { cat: string }) {
     decision: { label: "Decision", tone: "bg-primary/10 text-primary" },
     climate: { label: "Climate", tone: "bg-warning/15 text-warning-foreground" },
     registration: { label: "Registration", tone: "bg-secondary text-secondary-foreground" },
+    explainability: { label: "Explainer", tone: "bg-sky-500/15 text-sky-700 dark:text-sky-300" },
   };
   const m = map[cat] || map.decision;
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${m.tone}`}>{m.label}</span>;

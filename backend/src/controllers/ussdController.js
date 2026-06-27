@@ -2,23 +2,28 @@ import { calculateGraphScore } from "../services/scoringEngine.js";
 import { findFarmerByPhone } from "../services/farmerService.js";
 import { parseAfricasTalkingUssd } from "../services/africasTalking.js";
 import { handleLoanApplicationWorkflow } from "../services/underwriterAgent.js";
+import { routeExplainability } from "../services/explainabilityService.js";
+import { USSD_LANG_MENU, langFromUssdStep, normalizeLang } from "../config/languages.js";
 
 const sessionLang = new Map();
 
 function getLang(sessionId, steps) {
-  if (steps?.[0] === "2") return "sw";
-  if (steps?.[0] === "1") return "en";
+  if (steps?.[0]) return langFromUssdStep(steps[0]);
   return sessionLang.get(sessionId) || "sw";
 }
 
 function setLang(sessionId, lang) {
-  if (sessionId) sessionLang.set(sessionId, lang);
+  if (sessionId) sessionLang.set(sessionId, normalizeLang(lang));
 }
 
 function triggerIngestWorkflow(payload) {
   handleLoanApplicationWorkflow(payload).catch((err) => {
     console.error("[ussd→ingest]", err);
   });
+}
+
+function formatUssdExplainer(lookup, lang) {
+  return routeExplainability(lookup, lang, { channel: "ussd", skipOfficer: true });
 }
 
 export async function handleUssd(req, res) {
@@ -34,29 +39,35 @@ export async function handleUssd(req, res) {
     const known = phoneNumber ? await findFarmerByPhone(phoneNumber) : null;
 
     if (!text) {
-      response =
-        "CON KaLI Core Engine\n" +
-        "Chagua Lugha / Select Language\n" +
-        "1. English\n" +
-        "2. Kiswahili";
+      response = USSD_LANG_MENU;
     } else if (steps.length === 1) {
-      setLang(sessionId, steps[0] === "2" ? "sw" : "en");
+      setLang(sessionId, langFromUssdStep(steps[0]));
       const L = getLang(sessionId, steps);
       if (known) {
         response =
-          L === "sw"
+          L === "lg"
             ? "CON KaLI Core Engine\n" +
-              `Karibu, ${known.name?.split(" ")[0] || "mkulima"}.\n` +
-              "1. Omba Mkopo wa Pembejeo\n" +
-              "2. Angalia Hali ya Mkopo\n" +
-              "3. Ushauri wa Hali ya Hewa\n" +
-              "0. Toka"
-            : "CON KaLI Core Engine\n" +
-              `Welcome, ${known.name?.split(" ")[0] || "farmer"}.\n` +
-              "1. Request Input Credit\n" +
-              "2. Check Loan Status\n" +
-              "3. Climate Advisory\n" +
-              "0. Exit";
+              `Nkulamusizza, ${known.name?.split(" ")[0] || "omulimi"}.\n` +
+              "1. Saba Ebbanja\n" +
+              "2. Kebera Embeera\n" +
+              "3. Obubaka bw'Obudde\n" +
+              "4. Nnannyonnyola Obubonero\n" +
+              "0. Fuluma"
+            : L === "sw"
+              ? "CON KaLI Core Engine\n" +
+                `Karibu, ${known.name?.split(" ")[0] || "mkulima"}.\n` +
+                "1. Omba Mkopo wa Pembejeo\n" +
+                "2. Angalia Hali ya Mkopo\n" +
+                "3. Ushauri wa Hali ya Hewa\n" +
+                "4. Eleza Alama Yangu\n" +
+                "0. Toka"
+              : "CON KaLI Core Engine\n" +
+                `Welcome, ${known.name?.split(" ")[0] || "farmer"}.\n` +
+                "1. Request Input Credit\n" +
+                "2. Check Loan Status\n" +
+                "3. Climate Advisory\n" +
+                "4. Explain My Score\n" +
+                "0. Exit";
       } else {
         response =
           L === "sw"
@@ -128,25 +139,28 @@ export async function handleUssd(req, res) {
             ? "END Takwimu zinakusanywa.\nUtapokea SMS hivi punde."
             : "END Metrics compiling.\nYou will receive an SMS breakdown shortly.";
       } else if (menu === "2" && known && steps.length === 2) {
-        const result = await calculateGraphScore(known.id || known.national_id);
-        if (!result) {
-          response = lang === "sw" ? "END Hakuna ombi." : "END No application found.";
+        const result = await formatUssdExplainer(known.id || known.national_id, lang);
+        if (!result?.ok) {
+          response = lang === "lg" ? "END Tewali kukubisa." : lang === "sw" ? "END Hakuna ombi." : "END No application found.";
         } else {
-          const stance =
-            result.aggregate_score >= 65 ? "APPROVED" : result.aggregate_score >= 50 ? "REFER" : "DECLINE";
-          response = `END KaLI Score: ${result.aggregate_score}/100\n${stance}`;
+          response = `END ${result.farmer.sms}`;
+        }
+      } else if (menu === "4" && known && steps.length === 2) {
+        const result = await formatUssdExplainer(known.id || known.national_id, lang);
+        if (!result?.ok) {
+          response = lang === "lg" ? "END Tewali kukubisa." : lang === "sw" ? "END Hakuna rekodi." : "END No record found.";
+        } else {
+          response = `END ${result.farmer.sms}`;
         }
       } else if (menu === "2" && steps.length === 3) {
         response =
           lang === "sw" ? "CON Ingiza Kitambulisho:" : "CON Enter National ID:";
       } else if (menu === "2" && steps.length >= 4) {
-        const result = await calculateGraphScore(steps[3]);
-        if (!result) {
-          response = lang === "sw" ? "END Hakuna rekodi." : "END No matching registry.";
+        const result = await formatUssdExplainer(steps[3], lang);
+        if (!result?.ok) {
+          response = lang === "lg" ? "END Tewali kukubisa." : lang === "sw" ? "END Hakuna rekodi." : "END No matching registry.";
         } else {
-          const stance =
-            result.aggregate_score >= 65 ? "APPROVED" : result.aggregate_score >= 50 ? "REFER" : "DECLINE";
-          response = `END ${result.name}\nScore: ${result.aggregate_score}/100\n${stance}`;
+          response = `END ${result.farmer.sms}`;
         }
       } else if (menu === "3" && known && steps.length === 2) {
         const result = await calculateGraphScore(known.id || known.national_id);

@@ -1,21 +1,25 @@
+import { routeExplainability } from "./explainabilityService.js";
 import { parseIncomingIntent } from "./featherlessService.js";
 import { executeGraphScoreQuery } from "./growAsiaScoring.js";
 import { transitionAgentState } from "./masumiService.js";
 import { sendSms } from "./africasTalking.js";
-import { registerFarmerFromUssd, setFarmerUnderwritingState } from "./farmerService.js";
+import { registerFarmerFromUssd, setFarmerUnderwritingState, recordSmsSent } from "./farmerService.js";
 import { broadcastEvent } from "./eventBus.js";
 import { createMasumiPaymentIntent } from "./masumiService.js";
+import { normalizeLang } from "../config/languages.js";
 
 const APPROVE_THRESHOLD = Number(process.env.GROW_ASIA_APPROVE_THRESHOLD) || 0.65;
 
-const SMS = {
+const SMS_FALLBACK = {
   approved: {
     en: "Hello, your loan request has been APPROVED! You will receive an M-Pesa confirmation shortly.",
     sw: "Habari, mkopo wako umeidhinishwa! Utapokea ujumbe wa M-Pesa hivi punde.",
+    lg: "KaLI: Okusaba kwo kukkiriziddwa! Ojja kufuna M-Pesa mu bbanga ttono.",
   },
   declined: {
     en: "Sorry, your loan request could not be completed based on current group cluster metrics.",
     sw: "Samahani, ombi lako halijafaulu wakati huu kulingana na vigezo vya kikundi chako.",
+    lg: "KaLI: Okusaba kwo tekukkiriziddwa mu kiseera kino. Gezaako okunyweza ebibiina byo.",
   },
 };
 
@@ -24,7 +28,7 @@ const SMS = {
  */
 export async function handleLoanApplicationWorkflow(payload) {
   const trace = [];
-  const lang = payload.lang === "sw" ? "sw" : "en";
+  const lang = normalizeLang(payload.lang);
   const channel = payload.channel || "unknown";
   const applicationId = payload.id || `APP-${Date.now().toString(36).toUpperCase()}`;
 
@@ -84,10 +88,33 @@ export async function handleLoanApplicationWorkflow(payload) {
     farmerId: systemScore.farmerId,
   });
 
-  const smsBody = approved ? SMS.approved[lang] : SMS.declined[lang];
+  let explainability = null;
+  let smsBody = approved ? SMS_FALLBACK.approved[lang] : SMS_FALLBACK.declined[lang];
+
+  try {
+    explainability = await routeExplainability(systemScore.farmerId, lang, {
+      channel,
+      skipOfficer: channel === "ussd" || channel === "voice",
+    });
+    if (explainability?.farmer?.sms) {
+      smsBody = explainability.farmer.sms;
+      trace.push({
+        step: "featherless_explain",
+        chars: explainability.farmer.chars,
+        provider: explainability.farmer.provider,
+      });
+    }
+  } catch (err) {
+    console.warn("[underwriter] explainability failed:", err.message);
+  }
+
   if (payload.phone) {
     try {
       await sendSms({ to: payload.phone, message: smsBody });
+      await recordSmsSent(systemScore.farmerId, {
+        body: smsBody,
+        category: "explainability",
+      });
     } catch (err) {
       console.warn("[underwriter] SMS failed:", err.message);
     }
@@ -118,6 +145,7 @@ export async function handleLoanApplicationWorkflow(payload) {
     chama_name: systemScore.chama_name,
     zone_code: systemScore.zone_code,
     structured,
+    explainability: explainability?.farmer || null,
     timestamp: new Date().toISOString(),
   };
 
@@ -131,6 +159,7 @@ export async function handleLoanApplicationWorkflow(payload) {
     approved,
     systemScore,
     structured,
+    explainability,
     disbursement,
     trace,
   };

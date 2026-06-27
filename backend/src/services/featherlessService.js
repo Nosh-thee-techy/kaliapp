@@ -1,10 +1,13 @@
+import { SUPPORTED_LANGS, normalizeLang } from "../config/languages.js";
+
 const FEATHERLESS_BASE = process.env.FEATHERLESS_BASE_URL || "https://api.featherless.ai/v1";
 const FEATHERLESS_MODEL = process.env.FEATHERLESS_MODEL || "NousResearch/Hermes-3-Llama-3.1-8B";
 const FEATHERLESS_API_KEY = process.env.FEATHERLESS_API_KEY || "";
 
 const ENABLED = Boolean(FEATHERLESS_API_KEY);
 
-const PARSE_SYSTEM = `You are an expert Swahili/Sheng agricultural risk analyzer.
+const PARSE_SYSTEM = `You are an expert multilingual agricultural risk analyzer for East Africa.
+Languages: English, Kiswahili, Luganda, and Sheng.
 Extract data from the user input. Output ONLY strict JSON.
 Format: { "crop": string|null, "volume_expectation": number|null, "group_name": string|null, "location": string|null, "confidence_score": number }`;
 
@@ -71,17 +74,20 @@ export async function parseIncomingIntent(rawInput, language = "en") {
 function parseIncomingIntentLocal(rawInput, language) {
   const text = rawInput.toLowerCase();
   let crop = null;
-  if (/mahindi|maize|corn/.test(text)) crop = "Maize";
-  else if (/maharagwe|beans/.test(text)) crop = "French Beans";
-  else if (/nyanya|tomato/.test(text)) crop = "Tomatoes";
+  if (/mahindi|maize|corn|kasooli/.test(text)) crop = "Maize";
+  else if (/maharagwe|beans|ebijanjaalo/.test(text)) crop = "French Beans";
+  else if (/nyanya|tomato|ennyaanya/.test(text)) crop = "Tomatoes";
 
-  const acreMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:ekari|acre|acres)/i) || text.match(/ekari\s*(\d+)/i);
+  const acreMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:ekari|acre|acres|akaalo)/i) || text.match(/ekari\s*(\d+)/i);
   const volume_expectation = acreMatch ? Number(acreMatch[1]) : null;
 
   const chamaMatch = text.match(/chama\s+(\w+)/i);
   const group_name = chamaMatch ? chamaMatch[1] : null;
 
-  const locations = ["naivasha", "nakuru", "garissa", "eldoret", "nyeri"];
+  const locations = [
+    "naivasha", "nakuru", "garissa", "eldoret", "nyeri",
+    "kampala", "mbale", "gulu", "mbarara", "masaka", "wakiso",
+  ];
   const location = locations.find((l) => text.includes(l)) || null;
 
   return {
@@ -211,4 +217,145 @@ function generateMockNarrative(farmer) {
     model: "KaLI Graph Narrative Engine",
     provider: "KaLI Fallback (Featherless API key not configured)",
   };
+}
+
+const FARMER_EXPLAINER_SYSTEM = `You are KaLI's farmer-facing explainability agent for eSusFarm smallholders.
+You receive graph-based credit signals (scores, cooperative history, chama, climate).
+NEVER mention SHAP, machine learning, algorithms, or model internals.
+Write ONE encouraging SMS in the requested language.
+Focus on ONE realistic next action the farmer can take to improve standing.
+Max 155 characters. No quotes. Plain text only.`;
+
+/**
+ * Compress complex graph scoring into a localized ≤160 char farmer SMS (eSusFarm explainability).
+ */
+export async function generateFarmerExplainer(context, lang = "en", { maxChars = 160 } = {}) {
+  const language = normalizeLang(lang);
+  const langName = SUPPORTED_LANGS[language]?.featherless || "English";
+
+  if (!ENABLED) {
+    return mockFarmerExplainer(context, language, maxChars);
+  }
+
+  const topDriver = context.drivers?.[0];
+  const topDrag = context.drags?.[0];
+  const stance = context.stance || context.band || "REFER";
+  const score = context.unified?.canonical_score ?? context.aggregate_score ?? 0;
+
+  const payload = `Language: ${langName}
+Stance: ${stance}
+Score: ${score}/100
+Crop: ${context.crop_type || "unknown"}
+Cooperative: ${context.cooperative || "none"}
+Top strength: ${topDriver ? `${topDriver.label} (+${topDriver.points})` : "building history"}
+Top gap: ${topDrag ? `${topDrag.label} (-${topDrag.points})` : "none critical"}
+Climate SPI: ${context.climate?.spi ?? "n/a"}
+Climate advisory: ${context.climate?.advisory || "none"}
+
+Write the SMS now.`;
+
+  try {
+    const raw = await chatCompletion(
+      [
+        { role: "system", content: FARMER_EXPLAINER_SYSTEM },
+        { role: "user", content: payload },
+      ],
+      { maxTokens: 120, temperature: 0.35 },
+    );
+
+    const message = compressSms(raw, maxChars);
+    return {
+      message,
+      actionHint: topDrag?.label || topDriver?.label || null,
+      model: FEATHERLESS_MODEL,
+      provider: "Featherless AI",
+    };
+  } catch (err) {
+    console.warn("[featherless] farmer explainer failed:", err.message);
+    return mockFarmerExplainer(context, language, maxChars);
+  }
+}
+
+function compressSms(text, max) {
+  if (!text) return "";
+  const cleaned = text.replace(/^["']|["']$/g, "").replace(/\s+/g, " ").trim();
+  if (cleaned.length <= max) return cleaned;
+  return `${cleaned.slice(0, max - 1).trim()}…`;
+}
+
+function mockFarmerExplainer(context, lang, maxChars) {
+  const score = context.unified?.canonical_score ?? context.aggregate_score ?? 50;
+  const stance = context.stance || "REFER";
+  const drag = context.drags?.[0]?.label;
+  const crop = context.crop_type || "crop";
+
+  const templates = {
+    en: {
+      APPROVED: `KaLI: Score ${score}/100 — approved! Deliver ${crop} on time to your co-op. M-Pesa soon.`,
+      DECLINE: `KaLI: Score ${score}/100. ${drag ? `Try: ${drag.slice(0, 40)}.` : "Join a verified chama to strengthen your case."}`,
+      REFER: `KaLI: Score ${score}/100 — under review. Keep co-op deliveries steady this season.`,
+    },
+    sw: {
+      APPROVED: `KaLI: Alama ${score}/100 — imeidhinishwa! Wasilisha ${crop} kwa ushirika. M-Pesa inakuja.`,
+      DECLINE: `KaLI: Alama ${score}/100. ${drag ? `Jaribu: ${drag.slice(0, 35)}.` : "Jiunge na chama ili kuimarisha ombi."}`,
+      REFER: `KaLI: Alama ${score}/100 — inakaguliwa. Endelea kusafirisha mazao kwa ushirika.`,
+    },
+    lg: {
+      APPROVED: `KaLI: Obubonero ${score}/100 — kkiriziddwa! Waayo ${crop} mu kibiina. M-Pesa ejja.`,
+      DECLINE: `KaLI: Obubonero ${score}/100. ${drag ? `Gezaako: ${drag.slice(0, 35)}.` : "Weegatte ku kibiina eky'okwesiga."}`,
+      REFER: `KaLI: Obubonero ${score}/100 — kikeberwa. Sigala ng'owa ebirime mu kibiina.`,
+    },
+  };
+
+  const bucket = stance === "APPROVED" ? "APPROVED" : stance === "DECLINE" ? "DECLINE" : "REFER";
+  const message = compressSms(templates[lang]?.[bucket] || templates.en[bucket], maxChars);
+
+  return {
+    message,
+    actionHint: drag || null,
+    model: "KaLI Local Explainer",
+    provider: "KaLI Fallback",
+  };
+}
+
+const READINESS_ACTIONS_SYSTEM = `You help smallholder farmers improve credit readiness.
+Output ONLY JSON: { "actions": ["step1", "step2", "step3"] }
+Rules: max 3 actions, each under 90 characters, practical, encouraging, no ML jargon.
+Language must match the user request exactly.`;
+
+/** 2–3 digitized action points for the farmer readiness portal. */
+export async function generateReadinessActions(context, lang = "en") {
+  const language = normalizeLang(lang);
+  const langName = SUPPORTED_LANGS[language]?.featherless || "English";
+
+  if (!ENABLED) {
+    return (context.drags || []).slice(0, 3).map((d) => d.detail || d.label);
+  }
+
+  const dragSummary = (context.drags || []).map((d) => d.label).join("; ") || "building history";
+  const driverSummary = (context.drivers || []).map((d) => d.label).join("; ") || "none";
+
+  try {
+    const raw = await chatCompletion(
+      [
+        { role: "system", content: READINESS_ACTIONS_SYSTEM },
+        {
+          role: "user",
+          content: `Language: ${langName}
+Readiness score: ${context.unified?.canonical_score ?? context.aggregate_score}/100
+Crop: ${context.crop_type || "mixed"}
+Strengths: ${driverSummary}
+Gaps: ${dragSummary}
+Climate: SPI ${context.climate?.spi ?? "n/a"}`,
+        },
+      ],
+      { json: true, maxTokens: 220, temperature: 0.35 },
+    );
+    const parsed = JSON.parse(raw);
+    const actions = Array.isArray(parsed.actions) ? parsed.actions : [];
+    return actions.filter(Boolean).slice(0, 3);
+  } catch (err) {
+    console.warn("[featherless] readiness actions failed:", err.message);
+    return [];
+  }
 }
