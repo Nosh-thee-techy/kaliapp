@@ -1,8 +1,6 @@
 # Neo4j Integration Document
 **Kenya AI Challenge — Neo4j Track**
 
-> Recommended length: 1 page. Maximum: 2 pages.  
-> **Do not include passwords, API keys, credentials, or connection strings in submissions.**
 
 | Field | Value |
 |-------|-------|
