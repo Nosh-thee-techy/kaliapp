@@ -256,6 +256,27 @@ export async function registerFarmerFromUssd({
   }
 }
 
+export async function setFarmerUnderwritingState(lookup, state) {
+  if (!lookup) return;
+  const session = getDriver().session();
+  try {
+    await session.run(
+      `
+      MATCH (f:Farmer)
+      WHERE f.id = $lookup OR f.national_id = $lookup
+         OR replace(f.phone_number, ' ', '') = replace($lookup, ' ', '')
+         OR replace(f.phone_number, ' ', '') ENDS WITH right(replace($lookup, ' ', ''), 9)
+      SET f.underwriting_state = $state,
+          f.underwriting_updated_iso = toString(datetime())
+      RETURN f.id AS id
+    `,
+      { lookup: String(lookup), state },
+    );
+  } finally {
+    await session.close();
+  }
+}
+
 export async function findFarmerByPhone(phoneNumber) {
   const session = getDriver().session();
   const normalized = phoneNumber.replace(/\s/g, "");

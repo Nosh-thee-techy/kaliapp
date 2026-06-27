@@ -353,3 +353,66 @@ export async function fetchPartnerTechStatus(): Promise<PartnerTechStatus> {
 }
 
 export { BASE as API_CORE_BASE };
+
+export type MapFarmerPin = {
+  id: string;
+  name: string;
+  phone: string;
+  status: string;
+  underwriting_state: string;
+  crop_type: string;
+  cooperative: string;
+  chama_id: string | null;
+  chama_name: string | null;
+  zone_code: string;
+  zone_name: string;
+  x: number;
+  y: number;
+  systemScore: number | null;
+  riskTier: "green" | "amber" | "red";
+  spi: number | null;
+};
+
+export type MapChamaCluster = {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+};
+
+export type MapFarmersResponse = {
+  farmers: MapFarmerPin[];
+  chamas: MapChamaCluster[];
+  zones: { id: string; x: number; y: number; label: string }[];
+  fetchedAt: string;
+};
+
+export async function fetchMapFarmers(): Promise<MapFarmersResponse> {
+  return graphFetch("/api/map/farmers");
+}
+
+/** SSE stream — EventSource cannot set Authorization header; pass JWT as query param. */
+export function subscribeMapEvents(
+  token: string,
+  onEvent: (event: { type: string; data: Record<string, unknown> }) => void,
+): () => void {
+  const url = `${BASE}/api/events/stream?token=${encodeURIComponent(token)}`;
+  const es = new EventSource(url);
+
+  const handler = (type: string) => (ev: MessageEvent) => {
+    try {
+      onEvent({ type, data: JSON.parse(ev.data) });
+    } catch {
+      /* ignore malformed */
+    }
+  };
+
+  es.addEventListener("map_pin_updated", handler("map_pin_updated"));
+  es.addEventListener("application_updated", handler("application_updated"));
+
+  es.onerror = () => {
+    /* browser auto-reconnects */
+  };
+
+  return () => es.close();
+}

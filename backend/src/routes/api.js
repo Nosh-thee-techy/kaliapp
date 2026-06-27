@@ -16,24 +16,34 @@ import {
   postMasumiDisburse,
   getPartnerTechStatus,
   getGraphData,
+  getMapFarmers,
 } from "../controllers/scorecardController.js";
+import { postIngest, postIngestParse } from "../controllers/ingestController.js";
+import { getEventStream, getEventStreamStatus } from "../controllers/sseController.js";
 import authRoutes from "./auth.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
-const PUBLIC = new Set(["/health", "/stats/public"]);
+const PUBLIC = new Set(["/health", "/stats/public", "/ingest", "/ingest/parse"]);
 
 router.use("/auth", authRoutes);
 
 router.use((req, res, next) => {
   if (PUBLIC.has(req.path)) return next();
+  if (req.path === "/events/stream") return next();
   return requireAuth(req, res, next);
 });
 
 router.get("/health", healthCheck);
 router.get("/stats/public", getPublicStats);
 router.get("/sms", getSms);
+
+router.post("/ingest", postIngest);
+router.post("/ingest/parse", postIngestParse);
+
+router.get("/events/stream", getEventStream);
+router.get("/events/status", getEventStreamStatus);
 
 router.get("/pipeline", getPipeline);
 router.post("/pipeline/sync", postPipelineSync);
@@ -48,5 +58,6 @@ router.get("/farmers/:id/ai-narrative", getAiNarrative);
 router.post("/farmers/:id/masumi-disburse", postMasumiDisburse);
 router.get("/partner-tech", getPartnerTechStatus);
 router.get("/graph-data", getGraphData);
+router.get("/map/farmers", getMapFarmers);
 
 export default router;

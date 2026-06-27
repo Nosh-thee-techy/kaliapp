@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PartnersRouteImport } from './routes/partners'
+import { Route as MapRouteImport } from './routes/map'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as FarmerRouteImport } from './routes/farmer'
@@ -24,6 +25,11 @@ import { Route as ApiClimateRouteImport } from './routes/api/climate'
 const PartnersRoute = PartnersRouteImport.update({
   id: '/partners',
   path: '/partners',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MapRoute = MapRouteImport.update({
+  id: '/map',
+  path: '/map',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LogsRoute = LogsRouteImport.update({
@@ -84,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/farmer': typeof FarmerRoute
   '/graph': typeof GraphRoute
   '/logs': typeof LogsRoute
+  '/map': typeof MapRoute
   '/partners': typeof PartnersRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
@@ -97,6 +104,7 @@ export interface FileRoutesByTo {
   '/farmer': typeof FarmerRoute
   '/graph': typeof GraphRoute
   '/logs': typeof LogsRoute
+  '/map': typeof MapRoute
   '/partners': typeof PartnersRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
@@ -111,6 +119,7 @@ export interface FileRoutesById {
   '/farmer': typeof FarmerRoute
   '/graph': typeof GraphRoute
   '/logs': typeof LogsRoute
+  '/map': typeof MapRoute
   '/partners': typeof PartnersRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
@@ -126,6 +135,7 @@ export interface FileRouteTypes {
     | '/farmer'
     | '/graph'
     | '/logs'
+    | '/map'
     | '/partners'
     | '/api/climate'
     | '/api/ussd-callback'
@@ -139,6 +149,7 @@ export interface FileRouteTypes {
     | '/farmer'
     | '/graph'
     | '/logs'
+    | '/map'
     | '/partners'
     | '/api/climate'
     | '/api/ussd-callback'
@@ -152,6 +163,7 @@ export interface FileRouteTypes {
     | '/farmer'
     | '/graph'
     | '/logs'
+    | '/map'
     | '/partners'
     | '/api/climate'
     | '/api/ussd-callback'
@@ -166,6 +178,7 @@ export interface RootRouteChildren {
   FarmerRoute: typeof FarmerRoute
   GraphRoute: typeof GraphRoute
   LogsRoute: typeof LogsRoute
+  MapRoute: typeof MapRoute
   PartnersRoute: typeof PartnersRoute
   ApiClimateRoute: typeof ApiClimateRoute
   ApiUssdCallbackRoute: typeof ApiUssdCallbackRoute
@@ -180,6 +193,13 @@ declare module '@tanstack/react-router' {
       path: '/partners'
       fullPath: '/partners'
       preLoaderRoute: typeof PartnersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/map': {
+      id: '/map'
+      path: '/map'
+      fullPath: '/map'
+      preLoaderRoute: typeof MapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/logs': {
@@ -262,6 +282,7 @@ const rootRouteChildren: RootRouteChildren = {
   FarmerRoute: FarmerRoute,
   GraphRoute: GraphRoute,
   LogsRoute: LogsRoute,
+  MapRoute: MapRoute,
   PartnersRoute: PartnersRoute,
   ApiClimateRoute: ApiClimateRoute,
   ApiUssdCallbackRoute: ApiUssdCallbackRoute,

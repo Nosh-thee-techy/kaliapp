@@ -307,3 +307,14 @@ export async function getGraphData(_req, res) {
     await session.close();
   }
 }
+
+export async function getMapFarmers(_req, res) {
+  try {
+    const { getMapFarmersData } = await import("../services/mapService.js");
+    const data = await getMapFarmersData();
+    return res.json(data);
+  } catch (error) {
+    console.error("[map/farmers]", error);
+    return res.status(500).json({ error: error.message });
+  }
+}

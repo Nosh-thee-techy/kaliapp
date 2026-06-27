@@ -6,6 +6,46 @@ export function isMasumiEnabled() {
   return MASUMI_ENABLED;
 }
 
+/** Masumi workflow state transition (live API or stub log). */
+export async function transitionAgentState(applicationId, state, meta = {}) {
+  const payload = {
+    applicationId,
+    state,
+    agentId: process.env.MASUMI_AGENT_ID || "kali-underwriter-agent",
+    timestamp: new Date().toISOString(),
+    ...meta,
+  };
+
+  if (!MASUMI_ENABLED) {
+    console.log(`[masumi:stub] ${applicationId} → ${state}`, meta);
+    return { ok: true, stub: true, ...payload };
+  }
+
+  try {
+    const res = await fetch(`${MASUMI_BASE}/agents/workflow/transition`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.MASUMI_API_KEY}`,
+        "X-Agent-Id": process.env.MASUMI_AGENT_ID || "kali-underwriter-agent",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.warn("[masumi] transition failed:", res.status, text);
+      return { ok: false, ...payload, error: text };
+    }
+
+    const data = await res.json();
+    return { ok: true, ...payload, ...data };
+  } catch (err) {
+    console.warn("[masumi] transition error:", err.message);
+    return { ok: false, ...payload, error: err.message };
+  }
+}
+
 export async function createMasumiPaymentIntent({ farmerId, farmerName, amount, currency = "KES", officerId, loanId }) {
   if (!MASUMI_ENABLED) {
     console.log(`[masumi:stub] Payment intent created (STUB):

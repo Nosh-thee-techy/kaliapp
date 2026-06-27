@@ -28,7 +28,10 @@ app.get("/", (_req, res) => {
       farmers: "GET /api/farmers (Bearer JWT)",
       scorecard: "GET /api/scorecard/:id",
       decision: "POST /api/farmers/:id/decision",
-      ussd: "POST /ussd/ussd | POST /ussd/callback (Africa's Talking)",
+      ingest: "POST /api/ingest (USSD/Voice/Officer unified pipeline)",
+      map: "GET /api/map/farmers (Bearer JWT)",
+      events: "GET /api/events/stream?token=JWT (SSE live map)",
+      ussd: "POST /ussd/ussd | POST /ussd/callback | POST /ussd/voice",
     },
   });
 });
