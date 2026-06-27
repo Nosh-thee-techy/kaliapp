@@ -8,7 +8,9 @@ The platform is split into two distinct interfaces matching real-world operation
 
 | Interface | Users | Channel | Purpose |
 |-----------|-------|---------|---------|
-| **Officer Web App** | Rural branch loan officers | Desktop/tablet browser | Rich, low-bandwidth dashboard for queue triage and explainable underwriting |
+| **Officer Web App** | Rural branch loan officers | Desktop/tablet browser | Rich dashboard for queue triage and explainable underwriting |
+| **My Readiness** | Smallholder farmers | Mobile browser (no login) | Credit readiness, zone advisory, action points |
+| **Field Intelligence** | Agronomists / extension officers | Tablet browser | ML-ranked field verification queue |
 | **Farmer Pipeline** | Smallholder farmers (Women, Youth, PWD) | USSD + SMS on feature phones | Zero-data registration, status checks, and climate advisories |
 
 ---
@@ -281,9 +283,19 @@ Run from the **repository root**:
 
 ## Further reading
 
+**Full documentation hub:** [docs/README.md](docs/README.md)
+
+| Guide | Description |
+|-------|-------------|
+| [Product Guide](docs/PRODUCT_GUIDE.md) | What KaLI does, feature tour, scoring layers (with images) |
+| [User Journeys](docs/USER_JOURNEYS.md) | Farmer, officer, agronomist, USSD flows |
+| [Ground Truth Loop](docs/GROUND_TRUTH_LOOP.md) | Advisory → verify → credit bonus |
+| [API Reference](docs/API_REFERENCE.md) | REST endpoints and payloads |
+| [Deployment](docs/DEPLOYMENT.md) | Local dev, Vercel, Render, Aura |
+| [Architecture](docs/ARCHITECTURE.md) | Neo4j topology and Cypher scoring |
+
 - [frontend/README.md](frontend/README.md) — Routes, components, i18n, API client, dev guide
 - [backend/README.md](backend/README.md) — REST/USSD API, Neo4j config, scoring engine, seeding
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Graph topology, relationships, climate contagion
 
 ---
 

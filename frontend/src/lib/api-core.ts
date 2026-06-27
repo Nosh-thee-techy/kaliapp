@@ -742,6 +742,85 @@ export async function postFieldVerification(
   });
 }
 
+export type AgronomistMlInsight = {
+  priorityScore: number;
+  tier: "urgent" | "soon" | "routine";
+  visitProbability: number;
+  model: string;
+  drivers: { label: string; weight: string }[];
+};
+
+export type AgronomistQueueItem = {
+  farmerId: string;
+  name: string;
+  phone: string;
+  crop: string;
+  cooperative: string;
+  zoneCode: string;
+  zoneName: string;
+  spi: number;
+  pestProximityKm: number;
+  advisory: string | null;
+  hasActiveAlert: boolean;
+  pendingActions: number;
+  pendingItems: { id: string; title: string; completedIso?: string }[];
+  daysSinceSelfReport: number;
+  cooperativeDeliveryYears: number;
+  creditBand: string | null;
+  creditScore: number | null;
+  ml: AgronomistMlInsight;
+};
+
+export type AgronomistStats = {
+  ok: boolean;
+  pendingVerifications: number;
+  totalVerifications: number;
+  activeAlerts: number;
+};
+
+export type AgronomistZone = { id: string; name: string; hasAlert: boolean };
+
+export type AgronomistFieldInsight = {
+  ok: boolean;
+  farmer: {
+    id: string;
+    name: string;
+    phone: string;
+    crop: string;
+    cooperative: string;
+    zone: string;
+    zoneCode: string;
+  };
+  climate: {
+    spi: number;
+    pestProximityKm: number;
+    advisory: string | null;
+    rainfallMm30d: number;
+  };
+  actions: { id: string; title: string; selfDone: boolean; verified: boolean }[];
+  pendingItems: { id: string; title: string }[];
+  credit: { score: number | null; band: string };
+  ml: AgronomistMlInsight;
+  mitigationBonus: number;
+};
+
+export async function fetchAgronomistQueue(zone?: string): Promise<{ ok: boolean; queue: AgronomistQueueItem[]; count: number }> {
+  const q = zone ? `?zone=${encodeURIComponent(zone)}` : "";
+  return graphFetch(`/api/agronomist/queue${q}`);
+}
+
+export async function fetchAgronomistStats(): Promise<AgronomistStats> {
+  return graphFetch("/api/agronomist/stats");
+}
+
+export async function fetchAgronomistZones(): Promise<{ ok: boolean; zones: AgronomistZone[] }> {
+  return graphFetch("/api/agronomist/zones");
+}
+
+export async function fetchAgronomistInsight(farmerId: string): Promise<AgronomistFieldInsight> {
+  return graphFetch(`/api/agronomist/insight/${encodeURIComponent(farmerId)}`);
+}
+
 /** SSE stream — EventSource cannot set Authorization header; pass JWT as query param. */
 export function subscribeMapEvents(
   token: string,

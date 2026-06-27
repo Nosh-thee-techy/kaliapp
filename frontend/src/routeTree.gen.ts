@@ -17,6 +17,7 @@ import { Route as GraphRouteImport } from './routes/graph'
 import { Route as FarmerRouteImport } from './routes/farmer'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AgronomistRouteImport } from './routes/agronomist'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ScorecardIdRouteImport } from './routes/scorecard.$id'
 import { Route as FarmersIdRouteImport } from './routes/farmers.$id'
@@ -63,6 +64,11 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgronomistRoute = AgronomistRouteImport.update({
+  id: '/agronomist',
+  path: '/agronomist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -91,6 +97,7 @@ const ApiClimateRoute = ApiClimateRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agronomist': typeof AgronomistRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
   '/farmer': typeof FarmerRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agronomist': typeof AgronomistRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
   '/farmer': typeof FarmerRoute
@@ -122,6 +130,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agronomist': typeof AgronomistRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
   '/farmer': typeof FarmerRoute
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agronomist'
     | '/auth'
     | '/dashboard'
     | '/farmer'
@@ -154,6 +164,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/agronomist'
     | '/auth'
     | '/dashboard'
     | '/farmer'
@@ -169,6 +180,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/agronomist'
     | '/auth'
     | '/dashboard'
     | '/farmer'
@@ -185,6 +197,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgronomistRoute: typeof AgronomistRoute
   AuthRoute: typeof AuthRoute
   DashboardRoute: typeof DashboardRoute
   FarmerRoute: typeof FarmerRoute
@@ -257,6 +270,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agronomist': {
+      id: '/agronomist'
+      path: '/agronomist'
+      fullPath: '/agronomist'
+      preLoaderRoute: typeof AgronomistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -297,6 +317,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgronomistRoute: AgronomistRoute,
   AuthRoute: AuthRoute,
   DashboardRoute: DashboardRoute,
   FarmerRoute: FarmerRoute,

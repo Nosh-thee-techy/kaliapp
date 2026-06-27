@@ -23,6 +23,12 @@ import {
 import { postIngest, postIngestParse } from "../controllers/ingestController.js";
 import { postExplain, postAgentChat, getSupportedLanguages } from "../controllers/explainController.js";
 import { getReadiness, postReadinessActionComplete, postVerifyByLookup, postFieldVerification } from "../controllers/readinessController.js";
+import {
+  getAgronomistQueue,
+  getAgronomistStatsHandler,
+  getAgronomistZones,
+  getAgronomistInsight,
+} from "../controllers/agronomistController.js";
 import { getEventStream, getEventStreamStatus } from "../controllers/sseController.js";
 import authRoutes from "./auth.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
@@ -84,5 +90,10 @@ router.get("/graph-data", getGraphData);
 router.get("/map/farmers", getMapFarmers);
 router.get("/map/zones/:zoneId/analytics", getMapZoneAnalytics);
 router.get("/map/zones/:zoneId/weather", getMapZoneWeather);
+
+router.get("/agronomist/queue", getAgronomistQueue);
+router.get("/agronomist/stats", getAgronomistStatsHandler);
+router.get("/agronomist/zones", getAgronomistZones);
+router.get("/agronomist/insight/:farmerId", getAgronomistInsight);
 
 export default router;
