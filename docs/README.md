@@ -10,6 +10,7 @@ KaLI is a graph-native credit platform that helps lenders fairly score smallhold
 
 | Document | Audience | Contents |
 |----------|----------|----------|
+| **[Neo4j Graph Engine](./NEO4J_GRAPH_ENGINE.md)** | Judges, architects, Neo4j track | **Deep technical:** schema, Cypher algorithms, scoring evolution, climate contagion |
 | **[Product Guide](./PRODUCT_GUIDE.md)** | Investors, judges, product managers | What KaLI does, who it's for, feature tour with screenshots |
 | **[User Journeys](./USER_JOURNEYS.md)** | UX, demos, onboarding | Step-by-step flows for farmer, officer, agronomist |
 | **[Ground Truth Loop](./GROUND_TRUTH_LOOP.md)** | Technical + field partners | Advisory → action → verify → credit bonus |
