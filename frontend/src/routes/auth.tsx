@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate, redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sprout, Eye, EyeOff, ArrowRight, Globe } from "lucide-react";
 import farmerImg from "@/assets/farmer.jpg";
 import { useI18n, LANGS, type Lang } from "@/lib/i18n";
@@ -28,10 +28,30 @@ function AuthPage() {
   const [mode, setMode] = useState<"signin" | "register">("signin");
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [name, setName] = useState("Jane Mwangi");
-  const [email, setEmail] = useState("jane.mwangi@kali.co.ke");
-  const [password, setPassword] = useState("KaliBranch2026!");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mode === "signin") {
+      setEmail((e) => e || "jane.mwangi@kali.co.ke");
+      setPassword((p) => p || "KaliBranch2026!");
+    }
+  }, [mode]);
+
+  function switchMode(next: "signin" | "register") {
+    setMode(next);
+    setError(null);
+    if (next === "register") {
+      setName("");
+      setEmail("");
+      setPassword("");
+    } else {
+      setEmail("jane.mwangi@kali.co.ke");
+      setPassword("KaliBranch2026!");
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,11 +69,24 @@ function AuthPage() {
         token: result.token,
       });
       toast.success(mode === "signin" ? "Signed in" : "Account created");
-      navigate({ to: "/dashboard" });
+      await navigate({ to: "/dashboard", replace: true });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Sign-in failed";
+      let msg = err instanceof Error ? err.message : "Sign-in failed";
+      if (msg.includes("already exists")) {
+        msg = "This email is already registered. Sign in instead, or use a different email.";
+      } else if (msg.includes("at least 8")) {
+        msg = "Password must be at least 8 characters.";
+      } else if (
+        msg.includes("Failed to fetch") ||
+        msg.includes("NetworkError") ||
+        msg.includes("timed out") ||
+        msg.includes("404")
+      ) {
+        msg = "Cannot reach the API on port 4000. In a separate terminal run: cd backend && npm run dev";
+      }
       setError(msg);
       toast.error(msg);
+      console.error("[auth]", err);
     } finally {
       setLoading(false);
     }
@@ -109,6 +142,8 @@ function AuthPage() {
                 placeholder="jane.mwangi@kali.co.ke"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
               />
               <div>
                 <label className="text-xs font-medium text-muted-foreground">{t("auth.password")}</label>
@@ -118,6 +153,9 @@ function AuthPage() {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    autoComplete={mode === "signin" ? "current-password" : "new-password"}
                     className="w-full rounded-full border border-input bg-card px-5 py-3 pr-12 text-sm placeholder:text-muted-foreground/60 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
                   />
                   <button
@@ -148,15 +186,21 @@ function AuthPage() {
                 disabled={loading}
                 className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:bg-primary/90 disabled:opacity-60"
               >
-                {loading ? "…" : mode === "signin" ? t("auth.signin") : "Create account"}
+                {loading ? "Signing in…" : mode === "signin" ? t("auth.signin") : "Create account"}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </button>
             </form>
 
+            {mode === "register" && (
+              <p className="mt-4 text-center text-xs text-muted-foreground">
+                Seeded demo emails already exist — register with a new address (e.g. you@branch.co.ke).
+              </p>
+            )}
+
             <p className="mt-8 text-center text-sm text-muted-foreground">
               {mode === "signin" ? t("auth.noAccount") : "Already have an account?"}{" "}
               <button
-                onClick={() => setMode(mode === "signin" ? "register" : "signin")}
+                onClick={() => switchMode(mode === "signin" ? "register" : "signin")}
                 className="font-semibold text-primary hover:underline"
               >
                 {mode === "signin" ? t("auth.register") : t("auth.signin")}

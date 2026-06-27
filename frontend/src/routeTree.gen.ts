@@ -9,21 +9,34 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ReadinessRouteImport } from './routes/readiness'
 import { Route as PartnersRouteImport } from './routes/partners'
+import { Route as MapRouteImport } from './routes/map'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as FarmerRouteImport } from './routes/farmer'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AgronomistRouteImport } from './routes/agronomist'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ScorecardIdRouteImport } from './routes/scorecard.$id'
 import { Route as FarmersIdRouteImport } from './routes/farmers.$id'
 import { Route as ApiUssdCallbackRouteImport } from './routes/api/ussd-callback'
 import { Route as ApiClimateRouteImport } from './routes/api/climate'
 
+const ReadinessRoute = ReadinessRouteImport.update({
+  id: '/readiness',
+  path: '/readiness',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PartnersRoute = PartnersRouteImport.update({
   id: '/partners',
   path: '/partners',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MapRoute = MapRouteImport.update({
+  id: '/map',
+  path: '/map',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LogsRoute = LogsRouteImport.update({
@@ -49,6 +62,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgronomistRoute = AgronomistRouteImport.update({
+  id: '/agronomist',
+  path: '/agronomist',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -79,12 +97,15 @@ const ApiClimateRoute = ApiClimateRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agronomist': typeof AgronomistRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
   '/farmer': typeof FarmerRoute
   '/graph': typeof GraphRoute
   '/logs': typeof LogsRoute
+  '/map': typeof MapRoute
   '/partners': typeof PartnersRoute
+  '/readiness': typeof ReadinessRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
   '/farmers/$id': typeof FarmersIdRoute
@@ -92,12 +113,15 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agronomist': typeof AgronomistRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
   '/farmer': typeof FarmerRoute
   '/graph': typeof GraphRoute
   '/logs': typeof LogsRoute
+  '/map': typeof MapRoute
   '/partners': typeof PartnersRoute
+  '/readiness': typeof ReadinessRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
   '/farmers/$id': typeof FarmersIdRoute
@@ -106,12 +130,15 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agronomist': typeof AgronomistRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
   '/farmer': typeof FarmerRoute
   '/graph': typeof GraphRoute
   '/logs': typeof LogsRoute
+  '/map': typeof MapRoute
   '/partners': typeof PartnersRoute
+  '/readiness': typeof ReadinessRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
   '/farmers/$id': typeof FarmersIdRoute
@@ -121,12 +148,15 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agronomist'
     | '/auth'
     | '/dashboard'
     | '/farmer'
     | '/graph'
     | '/logs'
+    | '/map'
     | '/partners'
+    | '/readiness'
     | '/api/climate'
     | '/api/ussd-callback'
     | '/farmers/$id'
@@ -134,12 +164,15 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/agronomist'
     | '/auth'
     | '/dashboard'
     | '/farmer'
     | '/graph'
     | '/logs'
+    | '/map'
     | '/partners'
+    | '/readiness'
     | '/api/climate'
     | '/api/ussd-callback'
     | '/farmers/$id'
@@ -147,12 +180,15 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/agronomist'
     | '/auth'
     | '/dashboard'
     | '/farmer'
     | '/graph'
     | '/logs'
+    | '/map'
     | '/partners'
+    | '/readiness'
     | '/api/climate'
     | '/api/ussd-callback'
     | '/farmers/$id'
@@ -161,12 +197,15 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgronomistRoute: typeof AgronomistRoute
   AuthRoute: typeof AuthRoute
   DashboardRoute: typeof DashboardRoute
   FarmerRoute: typeof FarmerRoute
   GraphRoute: typeof GraphRoute
   LogsRoute: typeof LogsRoute
+  MapRoute: typeof MapRoute
   PartnersRoute: typeof PartnersRoute
+  ReadinessRoute: typeof ReadinessRoute
   ApiClimateRoute: typeof ApiClimateRoute
   ApiUssdCallbackRoute: typeof ApiUssdCallbackRoute
   FarmersIdRoute: typeof FarmersIdRoute
@@ -175,11 +214,25 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/readiness': {
+      id: '/readiness'
+      path: '/readiness'
+      fullPath: '/readiness'
+      preLoaderRoute: typeof ReadinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/partners': {
       id: '/partners'
       path: '/partners'
       fullPath: '/partners'
       preLoaderRoute: typeof PartnersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/map': {
+      id: '/map'
+      path: '/map'
+      fullPath: '/map'
+      preLoaderRoute: typeof MapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/logs': {
@@ -215,6 +268,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agronomist': {
+      id: '/agronomist'
+      path: '/agronomist'
+      fullPath: '/agronomist'
+      preLoaderRoute: typeof AgronomistRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -257,12 +317,15 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgronomistRoute: AgronomistRoute,
   AuthRoute: AuthRoute,
   DashboardRoute: DashboardRoute,
   FarmerRoute: FarmerRoute,
   GraphRoute: GraphRoute,
   LogsRoute: LogsRoute,
+  MapRoute: MapRoute,
   PartnersRoute: PartnersRoute,
+  ReadinessRoute: ReadinessRoute,
   ApiClimateRoute: ApiClimateRoute,
   ApiUssdCallbackRoute: ApiUssdCallbackRoute,
   FarmersIdRoute: FarmersIdRoute,

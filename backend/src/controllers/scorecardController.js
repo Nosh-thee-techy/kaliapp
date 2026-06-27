@@ -1,4 +1,6 @@
 import { calculateGraphScore } from "../services/scoringEngine.js";
+import { executeGraphScoreQuery } from "../services/growAsiaScoring.js";
+import { unifiedStance } from "../services/scoringUnified.js";
 import {
   listFarmers,
   recordDecision,
@@ -21,6 +23,11 @@ export async function getScorecard(req, res) {
     if (!assessment) {
       return res.status(404).json({ error: "Farmer not tracked in agricultural network" });
     }
+    const growAsia = await executeGraphScoreQuery({ lookup: req.params.id });
+    const unified = unifiedStance({
+      growAsiaScore: growAsia?.systemScore,
+      graphScore: assessment.aggregate_score,
+    });
     const mlFeatures = {
       cooperative_delivery_years: assessment.cooperative_delivery_years,
       chama_months_consistent: assessment.chama_months_consistent,
@@ -35,7 +42,13 @@ export async function getScorecard(req, res) {
     };
     const mlResult = mlApproveProbability(mlFeatures);
     const blended = blendedGraphMlScore(assessment.total, assessment.band, mlResult);
-    return res.json({ ...assessment, ml: mlResult, blended });
+    return res.json({
+      ...assessment,
+      grow_asia: growAsia,
+      unified,
+      ml: mlResult,
+      blended,
+    });
   } catch (error) {
     console.error("[scorecard]", error);
     return res.status(500).json({ error: error.message });
@@ -305,5 +318,41 @@ export async function getGraphData(_req, res) {
     return res.json({ nodes, links });
   } finally {
     await session.close();
+  }
+}
+
+export async function getMapFarmers(_req, res) {
+  try {
+    const { getMapFarmersData } = await import("../services/mapService.js");
+    const data = await getMapFarmersData();
+    return res.json(data);
+  } catch (error) {
+    console.error("[map/farmers]", error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getMapZoneAnalytics(req, res) {
+  try {
+    const { getZoneAnalytics } = await import("../services/mapService.js");
+    const data = await getZoneAnalytics(req.params.zoneId);
+    if (!data) {
+      return res.status(404).json({ error: "Climate zone not found" });
+    }
+    return res.json(data);
+  } catch (error) {
+    console.error("[map/zone]", error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function getMapZoneWeather(req, res) {
+  try {
+    const { fetchZoneWeather } = await import("../services/weatherService.js");
+    const data = await fetchZoneWeather(req.params.zoneId);
+    return res.json(data);
+  } catch (error) {
+    console.error("[map/weather]", error);
+    return res.status(500).json({ error: error.message });
   }
 }

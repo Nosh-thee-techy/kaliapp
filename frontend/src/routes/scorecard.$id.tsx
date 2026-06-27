@@ -1,13 +1,13 @@
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { farmers, SEGMENT_META, STATUS_META } from "@/lib/mock-data";
-import { fetchGraphScorecard, postGraphDecision, fetchAiNarrative, postMasumiDisburse } from "@/lib/api-core";
-import type { GraphScorecard, AiNarrative } from "@/lib/api-core";
+import { fetchGraphScorecard, postGraphDecision, fetchExplainability, postMasumiDisburse, postFieldVerification } from "@/lib/api-core";
+import type { GraphScorecard, ExplainabilityResult } from "@/lib/api-core";
 import { getOfficer } from "@/lib/officer-session";
 import { toast } from "sonner";
 import { requireOfficerSession } from "@/lib/require-officer";
 import { SadnessErrorPage } from "@/components/SadnessErrorPage";
-import { Sparkles, Send, ExternalLink, Loader2, Brain, Wallet, CheckCircle2, MessageSquare, Cpu } from "lucide-react";
+import { ExternalLink, Loader2, Brain, Wallet, CheckCircle2, MessageSquare, Cpu, MapPin } from "lucide-react";
 
 export const Route = createFileRoute("/scorecard/$id")({
   beforeLoad: requireOfficerSession,
@@ -87,25 +87,32 @@ function GraphScorecardView({
   setStance: (v: string) => void;
   navigate: ReturnType<typeof useNavigate>;
 }) {
-  const [aiNarrative, setAiNarrative] = useState<AiNarrative | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState(false);
+  const [explainability, setExplainability] = useState<ExplainabilityResult | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [explainError, setExplainError] = useState(false);
+  const [explainLang, setExplainLang] = useState<"en" | "sw" | "lg">("en");
   const [masumiLoading, setMasumiLoading] = useState(false);
   const [masumiResult, setMasumiResult] = useState<string | null>(null);
+  const [liveGraph, setLiveGraph] = useState(graph);
+  const [verifyLoading, setVerifyLoading] = useState(false);
 
   useEffect(() => {
-    setAiLoading(true);
-    setAiError(false);
-    fetchAiNarrative(graph.id)
-      .then((n) => {
-        setAiNarrative(n);
-        setAiLoading(false);
+    setLiveGraph(graph);
+  }, [graph]);
+
+  useEffect(() => {
+    setExplainLoading(true);
+    setExplainError(false);
+    fetchExplainability(graph.id, explainLang)
+      .then((r) => {
+        setExplainability(r);
+        setExplainLoading(false);
       })
       .catch(() => {
-        setAiError(true);
-        setAiLoading(false);
+        setExplainError(true);
+        setExplainLoading(false);
       });
-  }, [graph.id]);
+  }, [graph.id, explainLang]);
 
   async function handleMasumiDisburse() {
     setMasumiLoading(true);
@@ -129,16 +136,38 @@ function GraphScorecardView({
       setMasumiLoading(false);
     }
   }
+  async function handleFieldVerify() {
+    setVerifyLoading(true);
+    try {
+      const result = await postFieldVerification(liveGraph.id, {
+        type: "checkin",
+        notes: "Officer confirmed advisory action on farm",
+      });
+      if (result.ok) {
+        toast.success("Ground-truth verification recorded", {
+          description: result.message || "Score will update on refresh.",
+        });
+        const refreshed = await fetchGraphScorecard(liveGraph.id);
+        setLiveGraph(refreshed);
+      }
+    } catch {
+      toast.error("Verification failed", { description: "Is the backend running?" });
+    } finally {
+      setVerifyLoading(false);
+    }
+  }
+
   const score = {
-    total: graph.total,
-    band: graph.band,
-    drivers: graph.drivers,
-    drags: graph.drags,
-    assetSubstituteApplied: graph.asset_substitute_applied,
+    total: liveGraph.unified?.canonical_score ?? liveGraph.total,
+    band: (liveGraph.unified?.band as typeof liveGraph.band) ?? liveGraph.band,
+    drivers: liveGraph.drivers,
+    drags: liveGraph.drags,
+    assetSubstituteApplied: liveGraph.asset_substitute_applied,
   };
-  const climate = graph.climate;
-  const segment = graph.segment as keyof typeof SEGMENT_META;
-  const status = graph.status as keyof typeof STATUS_META;
+  const climate = liveGraph.climate;
+  const segment = liveGraph.segment as keyof typeof SEGMENT_META;
+  const status = liveGraph.status as keyof typeof STATUS_META;
+  const groundTruth = liveGraph.ground_truth;
 
   const bandGradient =
     score.band === "Approve"
@@ -234,6 +263,125 @@ function GraphScorecardView({
             </div>
           </section>
 
+          <section className="mt-6 rounded-2xl border border-accent/25 bg-gradient-to-br from-accent/5 via-card to-card p-6 shadow-card">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Brain className="h-5 w-5 text-accent" />
+                  <h2 className="font-display text-lg font-semibold text-foreground">eSusFarm explainability</h2>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Dual-output routing — farmer sees ≤160 char action SMS; officer sees full audit narrative for MIS.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    { code: "en", label: "English" },
+                    { code: "sw", label: "Kiswahili" },
+                    { code: "lg", label: "Luganda" },
+                  ] as const
+                ).map((l) => (
+                  <button
+                    key={l.code}
+                    type="button"
+                    onClick={() => setExplainLang(l.code)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      explainLang === l.code
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border bg-background text-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {explainLoading && (
+              <div className="mt-6 flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Featherless generating dual outputs…
+              </div>
+            )}
+
+            {explainError && !explainLoading && (
+              <p className="mt-6 text-sm text-muted-foreground">
+                Explainability unavailable. Check Featherless API key and backend connection.
+              </p>
+            )}
+
+            {explainability && !explainLoading && (
+              <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <MessageSquare className="h-4 w-4 text-sky-600" />
+                      Farmer SMS preview
+                    </div>
+                    <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300">
+                      {explainability.farmer.chars}/{explainability.farmer.maxChars} chars
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    What reaches USSD / voice / shared phone — no scores, no ML jargon.
+                  </p>
+                  <div className="mt-4 rounded-lg border border-dashed border-sky-500/40 bg-background p-4 font-mono text-sm leading-relaxed text-foreground">
+                    {explainability.farmer.sms}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                    <span>Stance: {explainability.stance}</span>
+                    <span>{explainability.farmer.provider}</span>
+                  </div>
+                  {explainability.farmer.actionHint && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Next action focus: {explainability.farmer.actionHint}
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-accent/30 bg-accent/5 p-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Cpu className="h-4 w-4 text-accent" />
+                      Officer audit narrative
+                    </div>
+                    <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-medium text-accent-foreground">
+                      MIS / hidden from farmer UI
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Full graph breakdown for field officers, lenders, and judges — satellite, SPI, network history.
+                  </p>
+                  <p className="mt-4 text-sm leading-relaxed text-foreground/90">
+                    {explainability.officer?.narrative ||
+                      `${graph.name}: ${score.drivers.length} drivers, ${score.drags.length} drags, unified score ${score.total}/100.`}
+                  </p>
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-md bg-background/80 p-2">
+                      <span className="text-muted-foreground">SPI</span>
+                      <p className="font-semibold tabular-nums">{climate.spi.toFixed(1)}</p>
+                    </div>
+                    <div className="rounded-md bg-background/80 p-2">
+                      <span className="text-muted-foreground">Grow Asia</span>
+                      <p className="font-semibold tabular-nums">
+                        {explainability.officer?.grow_asia?.systemScore != null
+                          ? `${Math.round(explainability.officer.grow_asia.systemScore * 100)}%`
+                          : graph.unified?.grow_asia_percent != null
+                            ? `${graph.unified.grow_asia_percent}%`
+                            : "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Model: {explainability.officer?.model?.split("/").pop() || "Featherless"}</span>
+                    <span>{explainability.officer?.provider || explainability.farmer.provider}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
           <section className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-card">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -294,13 +442,20 @@ function GraphScorecardView({
 
         <aside className="space-y-4">
           <div className={`rounded-2xl bg-gradient-to-br ${bandGradient} p-6 text-center text-primary-foreground shadow-elevated texture-grain`}>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-primary-foreground/80">KaLI Graph Score</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-primary-foreground/80">
+              {graph.unified ? "KaLI Unified Score" : "KaLI Graph Score"}
+            </p>
             <div className="mt-2 font-display text-6xl font-semibold tabular-nums leading-none">
               {score.total}
               <span className="text-2xl text-primary-foreground/70">/100</span>
             </div>
+            {graph.unified && (
+              <p className="mt-2 text-xs text-primary-foreground/85">
+                Grow Asia {graph.unified.grow_asia_percent}% · Graph {graph.unified.graph_score}/100
+              </p>
+            )}
             <span className="mt-3 inline-flex rounded-full bg-background/20 px-3 py-1 text-xs font-medium backdrop-blur">
-              {graph.recommendation}
+              {graph.unified?.recommendation ?? graph.recommendation}
             </span>
           </div>
 
@@ -323,6 +478,48 @@ function GraphScorecardView({
           </div>
 
           <div className="rounded-xl border border-border bg-card p-5 shadow-card">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <MapPin className="h-4 w-4 text-primary" />
+              Ground-truth loop
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Macro advisory → farmer action → field verification → credit bonus (+{groundTruth?.bonusPoints ?? 8} pts).
+            </p>
+            <dl className="mt-3 space-y-2 text-sm">
+              <Row
+                label="Active zone alert"
+                value={groundTruth?.hadActiveAlert ? "Yes" : "No"}
+                tone={groundTruth?.hadActiveAlert ? "warn" : "ok"}
+              />
+              <Row label="Field verifications" value={String(groundTruth?.verifiedCount ?? 0)} />
+              <Row
+                label="Mitigation bonus"
+                value={groundTruth?.bonusPoints ? `+${groundTruth.bonusPoints}` : "—"}
+                tone={groundTruth?.bonusPoints ? "ok" : undefined}
+              />
+            </dl>
+            {groundTruth?.advisory && (
+              <div className="mt-3 rounded-md border border-primary/25 bg-primary/5 p-2.5 text-xs text-foreground">
+                {groundTruth.advisory}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleFieldVerify}
+              disabled={verifyLoading}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 disabled:opacity-60"
+            >
+              {verifyLoading ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Recording…
+                </>
+              ) : (
+                <>Verify field action (FarmerQue layer)</>
+              )}
+            </button>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-5 shadow-card">
             <h3 className="text-sm font-semibold text-foreground">Graph network signals</h3>
             <dl className="mt-3 space-y-2 text-sm">
               <Row label="Chama" value={graph.graph_context.chama_name || "—"} />
@@ -334,40 +531,7 @@ function GraphScorecardView({
             </dl>
           </div>
 
-          {/* AI NARRATIVE PANEL */}
-          <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/5 to-transparent p-5 shadow-card">
-            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Brain className="h-4 w-4 text-accent" />
-              AI Credit Narrative
-              {aiNarrative && (
-                <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[9px] font-medium text-accent-foreground">
-                  {aiNarrative.model.includes("Featherless") ? "Featherless AI" : aiNarrative.provider?.includes("Featherless") ? "Featherless AI" : "KaLI Engine"}
-                </span>
-              )}
-            </div>
-            {aiLoading && (
-              <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Generating narrative from graph data...
-              </div>
-            )}
-            {aiError && (
-              <div className="mt-3 text-sm text-muted-foreground">
-                AI narrative unavailable. {graph.name} has {score.drivers.length} drivers and {score.drags.length} drags affecting their {score.total}/100 score.
-              </div>
-            )}
-            {aiNarrative && (
-              <div className="mt-3 space-y-2">
-                <p className="text-sm leading-relaxed text-foreground/90">{aiNarrative.narrative}</p>
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                  <span>Model: {aiNarrative.model.split("/").pop() || aiNarrative.model}</span>
-                  <span>{aiNarrative.provider}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ML SCORE LAYER */}
+          {/* MASUMI PAYMENT */}
           {graph.ml && graph.blended && (
             <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/5 to-transparent p-5 shadow-card">
               <div className="flex items-center gap-2 text-sm font-semibold text-foreground">

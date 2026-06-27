@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { useState, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Sprout, Home, Smartphone, Activity, Share2, Puzzle, LogOut, Search, Globe, Bell } from "lucide-react";
+import { Sprout, Home, Smartphone, Activity, Share2, Puzzle, LogOut, Search, Globe, Bell, Map as MapIcon, Leaf } from "lucide-react";
 
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
@@ -118,6 +118,8 @@ function Sidebar() {
   const { t } = useI18n();
   const items = [
     { to: "/dashboard", label: t("nav.portfolio"), icon: Home },
+    { to: "/map", label: "Map", icon: MapIcon },
+    { to: "/agronomist", label: "Field", icon: Leaf },
     { to: "/farmer", label: t("nav.farmer"), icon: Smartphone },
     { to: "/logs", label: t("nav.logs"), icon: Activity },
     { to: "/graph", label: "Graph", icon: Share2 },
@@ -215,7 +217,7 @@ function TopBar() {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isChromeless = pathname === "/" || pathname.startsWith("/auth");
+  const isChromeless = pathname === "/" || pathname.startsWith("/auth") || pathname.startsWith("/readiness");
 
   return (
     <QueryClientProvider client={queryClient}>

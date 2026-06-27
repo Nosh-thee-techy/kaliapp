@@ -219,6 +219,15 @@ export async function registerFarmerFromUssd({
     )
     WITH f, coop
     OPTIONAL MATCH (coop)-[:OPERATES_IN]->(zone:ClimateZone)
+    OPTIONAL MATCH (f)-[:MEMBER_OF]->(memberCh:Chama)
+    OPTIONAL MATCH (ch:Chama)
+    WHERE memberCh IS NULL
+    WITH f, zone, memberCh, ch
+    ORDER BY ch.id
+    WITH f, zone, memberCh, head(collect(ch)) AS defaultChama
+    FOREACH (_ IN CASE WHEN memberCh IS NULL AND defaultChama IS NOT NULL THEN [1] ELSE [] END |
+      MERGE (f)-[:MEMBER_OF]->(defaultChama)
+    )
     WITH f, zone
     SET f.status = CASE WHEN zone IS NOT NULL THEN "ready_for_review" ELSE "awaiting_climate" END
     CREATE (sms:SmsMessage {
@@ -251,6 +260,27 @@ export async function registerFarmerFromUssd({
       console.warn("[sms] registration notify failed (graph node saved):", err.message);
     }
     return farmer;
+  } finally {
+    await session.close();
+  }
+}
+
+export async function setFarmerUnderwritingState(lookup, state) {
+  if (!lookup) return;
+  const session = getDriver().session();
+  try {
+    await session.run(
+      `
+      MATCH (f:Farmer)
+      WHERE f.id = $lookup OR f.national_id = $lookup
+         OR replace(f.phone_number, ' ', '') = replace($lookup, ' ', '')
+         OR replace(f.phone_number, ' ', '') ENDS WITH right(replace($lookup, ' ', ''), 9)
+      SET f.underwriting_state = $state,
+          f.underwriting_updated_iso = toString(datetime())
+      RETURN f.id AS id
+    `,
+      { lookup: String(lookup), state },
+    );
   } finally {
     await session.close();
   }

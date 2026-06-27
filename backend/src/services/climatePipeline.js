@@ -1,19 +1,13 @@
 import { getDriver } from "../config/neo4j.js";
 
+import { ALL_ZONE_COORDS } from "../config/zoneCoords.js";
+
 const CHIRPS_SOURCE = "CHIRPS Rainfall Grids";
 const ICPAC_SOURCE = "ICPAC SPI Index";
 const PEST_SOURCE = "Pest Proximity Feed (KALRO)";
 const OPEN_METEO_SOURCE = "Open-Meteo Weather API";
 
-const ZONE_COORDS = {
-  "KE-RIFT-04": { lat: -0.75, lon: 36.38, name: "Naivasha Basin" },
-  "KE-RIFT-02": { lat: 0.52, lon: 35.28, name: "Uasin Gishu Plateau" },
-  "KE-NE-01": { lat: -0.45, lon: 39.65, name: "North Eastern Range" },
-  "KE-NYZ-03": { lat: -0.18, lon: 34.52, name: "Ahero Irrigation Belt" },
-  "KE-CEN-01": { lat: -0.48, lon: 37.13, name: "Mt. Kenya South" },
-  "KE-EAS-02": { lat: -1.52, lon: 37.27, name: "Machakos Lowlands" },
-};
-
+const ZONE_COORDS = ALL_ZONE_COORDS;
 async function fetchOpenMeteoData(lat, lon) {
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=precipitation_sum,temperature_2m_max&past_days=30&forecast_days=0&timezone=Africa/Nairobi`;
@@ -134,6 +128,16 @@ export async function syncClimatePipeline() {
           syncedAt,
         },
       );
+
+      if (u.advisory) {
+        const { upsertClimateAlert } = await import("./groundTruthService.js");
+        await upsertClimateAlert(session, {
+          zoneCode: u.zoneCode,
+          advisory: u.advisory,
+          spi: u.current_spi_index,
+          syncedAt,
+        });
+      }
     }
 
     await session.run(
