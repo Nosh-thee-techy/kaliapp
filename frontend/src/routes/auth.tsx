@@ -130,7 +130,7 @@ function AuthPage() {
                 </div>
                 {mode === "signin" && (
                   <div className="mt-2 text-right">
-                    <a href="#" className="text-xs font-semibold text-primary hover:underline">
+                    <a href="#" onClick={(e) => { e.preventDefault(); toast.info("Contact your branch administrator to reset your password."); }} className="text-xs font-semibold text-primary hover:underline">
                       {t("auth.forgot")}
                     </a>
                   </div>

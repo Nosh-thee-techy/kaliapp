@@ -9,7 +9,8 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useState, useEffect, type ReactNode } from "react";
-import { Sprout, Home, Smartphone, Activity, Settings, LogOut, Bell, Search, Globe } from "lucide-react";
+import { toast } from "sonner";
+import { Sprout, Home, Smartphone, Activity, Share2, Puzzle, LogOut, Search, Globe, Bell } from "lucide-react";
 
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
@@ -119,6 +120,8 @@ function Sidebar() {
     { to: "/dashboard", label: t("nav.portfolio"), icon: Home },
     { to: "/farmer", label: t("nav.farmer"), icon: Smartphone },
     { to: "/logs", label: t("nav.logs"), icon: Activity },
+    { to: "/graph", label: "Graph", icon: Share2 },
+    { to: "/partners", label: "Tech", icon: Puzzle },
   ];
   return (
     <aside className="sticky top-0 z-30 flex h-screen w-20 flex-col items-center gap-1 border-r border-border bg-charcoal py-6 text-primary-foreground lg:w-24">
@@ -138,13 +141,10 @@ function Sidebar() {
           </Link>
         ))}
       </nav>
-      <button className="flex h-12 w-12 items-center justify-center rounded-2xl text-primary-foreground/50 hover:bg-white/10 hover:text-primary-foreground">
-        <Settings className="h-5 w-5" />
-      </button>
       <button
         onClick={() => {
           clearOfficer();
-          window.location.href = "/auth";
+          window.location.href = "/";
         }}
         className="flex h-12 w-12 items-center justify-center rounded-2xl text-primary-foreground/50 hover:bg-white/10 hover:text-primary-foreground"
       >
@@ -195,9 +195,11 @@ function TopBar() {
           />
           {graphOk ? t("common.synced") : graphOk === false ? t("common.offline") : "…"}
         </span>
-        <button className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-foreground hover:bg-secondary">
+        <button
+          onClick={() => toast.info("No new notifications. Check the audit log for updates.")}
+          className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-foreground hover:bg-secondary"
+        >
           <Bell className="h-4 w-4" />
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive" />
         </button>
         <div
           className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-glow text-sm font-semibold text-primary-foreground"

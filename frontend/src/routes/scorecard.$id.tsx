@@ -7,7 +7,7 @@ import { getOfficer } from "@/lib/officer-session";
 import { toast } from "sonner";
 import { requireOfficerSession } from "@/lib/require-officer";
 import { SadnessErrorPage } from "@/components/SadnessErrorPage";
-import { Sparkles, Send, ExternalLink, Loader2, Brain, Wallet, CheckCircle2, MessageSquare } from "lucide-react";
+import { Sparkles, Send, ExternalLink, Loader2, Brain, Wallet, CheckCircle2, MessageSquare, Cpu } from "lucide-react";
 
 export const Route = createFileRoute("/scorecard/$id")({
   beforeLoad: requireOfficerSession,
@@ -366,6 +366,42 @@ function GraphScorecardView({
               </div>
             )}
           </div>
+
+          {/* ML SCORE LAYER */}
+          {graph.ml && graph.blended && (
+            <div className="rounded-xl border border-accent/30 bg-gradient-to-br from-accent/5 to-transparent p-5 shadow-card">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Cpu className="h-4 w-4 text-accent" />
+                ML Credit Layer
+                <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[9px] font-medium text-accent-foreground">
+                  Hybrid AI
+                </span>
+              </div>
+              <div className="mt-3 flex items-baseline justify-between">
+                <span className="text-xs text-muted-foreground">Graph Cypher (60%)</span>
+                <span className="font-display text-xl font-semibold tabular-nums">{graph.blended.graphScore}</span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs text-muted-foreground">Logistic Regression (40%)</span>
+                <span className="font-display text-xl font-semibold tabular-nums">{graph.blended.mlScore}</span>
+              </div>
+              <div className="mt-2 flex items-baseline justify-between border-t border-border pt-2">
+                <span className="text-xs font-semibold text-foreground">Blended Score</span>
+                <div className="text-right">
+                  <span className="font-display text-2xl font-semibold tabular-nums">{graph.blended.blended}</span>
+                  <span className="ml-1 text-xs text-muted-foreground">/100</span>
+                  <div className={`text-[10px] font-semibold uppercase ${graph.blended.blendedBand === "Approve" ? "text-success" : graph.blended.blendedBand === "Refer" ? "text-accent" : "text-destructive"}`}>
+                    {graph.blended.blendedBand}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 rounded-lg bg-secondary/50 p-2.5">
+                <div className="text-[10px] text-muted-foreground">Approve probability</div>
+                <div className="text-sm font-semibold tabular-nums">{(graph.ml.approvedProbability * 100).toFixed(1)}%</div>
+              </div>
+              <p className="mt-2 text-[10px] text-muted-foreground">{graph.blended.model}</p>
+            </div>
+          )}
 
           {/* MASUMI PAYMENT */}
           <div className="rounded-xl border border-border bg-card p-5 shadow-card">

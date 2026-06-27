@@ -103,37 +103,12 @@ SET ch5.name = "Nyeri Dairy Women", ch5.repayment_rate_pct = 96.0;
 MERGE (ch6:Chama {id: "CHAMA-MCK-02"})
 SET ch6.name = "Machakos Maize Circle", ch6.repayment_rate_pct = 98.5;
 
-// --- Archetypal thin-file profile (pitch demo) ---
-MERGE (f0:Farmer {id: "39201928"})
-SET f0.national_id = "39201928",
-    f0.name = "Mary Wanjiku (Archetype)",
-    f0.phone_number = "+254712345678",
-    f0.demographic_group = "Women",
-    f0.vulnerability_tag = "Female-headed HH",
-    f0.has_land_ownership = false,
-    f0.lease_duration_months = 36,
-    f0.chama_months_consistent = 18,
-    f0.mobile_money_inflows_kes = 128000,
-    f0.requested_kes = 45000,
-    f0.crop_type = "French Beans",
-    f0.harvest_month = "January",
-    f0.status = "ready_for_review",
-    f0.registered_via = "USSD",
-    f0.submitted_iso = toString(datetime() - duration({hours: 3}));
-
-MERGE (f0)-[:DELIVERS_TO {delivery_years: 3, volume_tons: 4.2, avg_seasonal_revenue_kes: 45000}]->(c7);
-MERGE (f0)-[:MEMBER_OF]->(ch1);
-MERGE (plot0:FarmPlot {id: "PLOT-39201928"})
-SET plot0.acreage = 2.5;
-MERGE (f0)-[:LOCATED_IN]->(plot0);
-MERGE (plot0)-[:IN_ZONE]->(z1);
-
+// --- Peer guarantor (network collateral) ---
 MERGE (peer:Farmer {id: "20104829"})
 SET peer.national_id = "20104829",
     peer.name = "David Koech",
     peer.credit_standing = "Excellent",
     peer.demographic_group = "General";
-MERGE (peer)-[:GUARANTEES]->(f0);
 
 // --- Portfolio farmers (branch queue demo) ---
 MERGE (f1:Farmer {id: "F-1042"})
@@ -158,6 +133,8 @@ MERGE (f1)-[:DELIVERS_TO {delivery_years: 3, volume_tons: 3.8}]->(c1);
 MERGE (f1)-[:MEMBER_OF]->(ch1);
 MERGE (p1:FarmPlot {id: "PLOT-F-1042"}) SET p1.acreage = 1.5;
 MERGE (f1)-[:LOCATED_IN]->(p1);
+MERGE (peer:Farmer {id: "20104829"})
+MERGE (peer)-[:GUARANTEES]->(f1);
 
 MERGE (f2:Farmer {id: "F-1043"})
 SET f2.national_id = "31220984",

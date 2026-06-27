@@ -36,6 +36,23 @@ export type GraphScorecard = {
   drivers: GraphScoreDriver[];
   drags: GraphScoreDriver[];
   asset_substitute_applied: boolean;
+  ml?: {
+    approvedProbability: number;
+    mlScore: number;
+    mlBand: string;
+    model: string;
+    weightsUsed: Record<string, number>;
+    featuresUsed: string[];
+  };
+  blended?: {
+    blended: number;
+    blendedBand: string;
+    graphWeight: number;
+    mlWeight: number;
+    graphScore: number;
+    mlScore: number;
+    model: string;
+  };
   climate: {
     zone_code: string;
     spi: number;
@@ -93,7 +110,7 @@ export type AuditEntry = {
   decision: string;
   stance?: string;
   notes: string;
-  score: number | null;
+  score: { low: number; high: number } | null;
   timestampIso: string;
 };
 
@@ -133,7 +150,7 @@ function apiPath(path: string) {
   return `${BASE}${path}`;
 }
 
-async function graphFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function graphFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? getAuthToken() : null;
   const res = await fetch(apiPath(path), {
     ...init,
@@ -291,12 +308,20 @@ export type MasumiPaymentResult = {
   note?: string;
 };
 
+export type PartnerTechEntry = {
+  enabled: boolean;
+  provider: string;
+  configured: boolean;
+};
+
 export type PartnerTechStatus = {
-  neo4j: { enabled: boolean; provider: string };
-  featherless: { enabled: boolean; provider: string; configured: boolean };
-  masumi: { enabled: boolean; provider: string; configured: boolean };
-  africas_talking: { enabled: boolean; provider: string; configured: boolean };
-  open_meteo: { enabled: boolean; provider: string; configured: boolean };
+  neo4j: PartnerTechEntry;
+  featherless: PartnerTechEntry;
+  masumi: PartnerTechEntry;
+  lovable: PartnerTechEntry;
+  ml_scoring: PartnerTechEntry;
+  africas_talking: PartnerTechEntry;
+  open_meteo: PartnerTechEntry;
 };
 
 export async function fetchAiNarrative(id: string): Promise<AiNarrative> {

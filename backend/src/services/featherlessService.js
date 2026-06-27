@@ -1,5 +1,5 @@
 const FEATHERLESS_BASE = "https://api.featherless.ai/v1";
-const FEATHERLESS_MODEL = "meta-llama/Llama-3.3-70B-Instruct";
+const FEATHERLESS_MODEL = "NousResearch/Hermes-3-Llama-3.1-8B";
 const FEATHERLESS_API_KEY = process.env.FEATHERLESS_API_KEY || "";
 
 const ENABLED = Boolean(FEATHERLESS_API_KEY);

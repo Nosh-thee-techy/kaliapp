@@ -202,7 +202,7 @@ function LogsPage() {
                       {a.decision}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right font-medium tabular-nums">{a.score ?? "—"}</td>
+                  <td className="px-4 py-3 text-right font-medium tabular-nums">{a.score ? `${a.score.low}${a.score.high ? ` / ${a.score.high}` : ""}` : "—"}</td>
                   <td className="px-4 py-3 text-muted-foreground">{formatRelative(a.timestampIso)}</td>
                   <td className="px-4 py-3 text-muted-foreground">{a.notes}</td>
                 </tr>

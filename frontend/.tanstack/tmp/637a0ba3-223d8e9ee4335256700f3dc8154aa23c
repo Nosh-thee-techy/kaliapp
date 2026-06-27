@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as PartnersRouteImport } from './routes/partners'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as FarmerRouteImport } from './routes/farmer'
@@ -21,11 +20,6 @@ import { Route as FarmersIdRouteImport } from './routes/farmers.$id'
 import { Route as ApiUssdCallbackRouteImport } from './routes/api/ussd-callback'
 import { Route as ApiClimateRouteImport } from './routes/api/climate'
 
-const PartnersRoute = PartnersRouteImport.update({
-  id: '/partners',
-  path: '/partners',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LogsRoute = LogsRouteImport.update({
   id: '/logs',
   path: '/logs',
@@ -84,7 +78,6 @@ export interface FileRoutesByFullPath {
   '/farmer': typeof FarmerRoute
   '/graph': typeof GraphRoute
   '/logs': typeof LogsRoute
-  '/partners': typeof PartnersRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
   '/farmers/$id': typeof FarmersIdRoute
@@ -97,7 +90,6 @@ export interface FileRoutesByTo {
   '/farmer': typeof FarmerRoute
   '/graph': typeof GraphRoute
   '/logs': typeof LogsRoute
-  '/partners': typeof PartnersRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
   '/farmers/$id': typeof FarmersIdRoute
@@ -111,7 +103,6 @@ export interface FileRoutesById {
   '/farmer': typeof FarmerRoute
   '/graph': typeof GraphRoute
   '/logs': typeof LogsRoute
-  '/partners': typeof PartnersRoute
   '/api/climate': typeof ApiClimateRoute
   '/api/ussd-callback': typeof ApiUssdCallbackRoute
   '/farmers/$id': typeof FarmersIdRoute
@@ -126,7 +117,6 @@ export interface FileRouteTypes {
     | '/farmer'
     | '/graph'
     | '/logs'
-    | '/partners'
     | '/api/climate'
     | '/api/ussd-callback'
     | '/farmers/$id'
@@ -139,7 +129,6 @@ export interface FileRouteTypes {
     | '/farmer'
     | '/graph'
     | '/logs'
-    | '/partners'
     | '/api/climate'
     | '/api/ussd-callback'
     | '/farmers/$id'
@@ -152,7 +141,6 @@ export interface FileRouteTypes {
     | '/farmer'
     | '/graph'
     | '/logs'
-    | '/partners'
     | '/api/climate'
     | '/api/ussd-callback'
     | '/farmers/$id'
@@ -166,7 +154,6 @@ export interface RootRouteChildren {
   FarmerRoute: typeof FarmerRoute
   GraphRoute: typeof GraphRoute
   LogsRoute: typeof LogsRoute
-  PartnersRoute: typeof PartnersRoute
   ApiClimateRoute: typeof ApiClimateRoute
   ApiUssdCallbackRoute: typeof ApiUssdCallbackRoute
   FarmersIdRoute: typeof FarmersIdRoute
@@ -175,13 +162,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/partners': {
-      id: '/partners'
-      path: '/partners'
-      fullPath: '/partners'
-      preLoaderRoute: typeof PartnersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/logs': {
       id: '/logs'
       path: '/logs'
@@ -262,7 +242,6 @@ const rootRouteChildren: RootRouteChildren = {
   FarmerRoute: FarmerRoute,
   GraphRoute: GraphRoute,
   LogsRoute: LogsRoute,
-  PartnersRoute: PartnersRoute,
   ApiClimateRoute: ApiClimateRoute,
   ApiUssdCallbackRoute: ApiUssdCallbackRoute,
   FarmersIdRoute: FarmersIdRoute,

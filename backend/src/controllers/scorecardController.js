@@ -13,6 +13,7 @@ import {
 import { syncClimatePipeline } from "../services/climatePipeline.js";
 import { generateCreditNarrative, isFeatherlessEnabled } from "../services/featherlessService.js";
 import { createMasumiPaymentIntent, isMasumiEnabled } from "../services/masumiService.js";
+import { mlApproveProbability, blendedGraphMlScore, isMlEnabled } from "../services/mlScoringService.js";
 
 export async function getScorecard(req, res) {
   try {
@@ -20,7 +21,21 @@ export async function getScorecard(req, res) {
     if (!assessment) {
       return res.status(404).json({ error: "Farmer not tracked in agricultural network" });
     }
-    return res.json(assessment);
+    const mlFeatures = {
+      cooperative_delivery_years: assessment.cooperative_delivery_years,
+      chama_months_consistent: assessment.chama_months_consistent,
+      chama_repayment_rate_pct: assessment.graph_context?.chama_repayment_rate_pct || 0,
+      mobile_money_inflows_kes: assessment.mobile_money_inflows_kes,
+      has_land_ownership: assessment.has_land_ownership,
+      lease_duration_months: assessment.lease_duration_months,
+      is_guaranteed: assessment.graph_context?.is_guaranteed || false,
+      spi_index: assessment.climate?.spi || 0,
+      pest_proximity_km: assessment.climate?.pest_proximity_km || 999,
+      acreage: assessment.acreage || 0,
+    };
+    const mlResult = mlApproveProbability(mlFeatures);
+    const blended = blendedGraphMlScore(assessment.total, assessment.band, mlResult);
+    return res.json({ ...assessment, ml: mlResult, blended });
   } catch (error) {
     console.error("[scorecard]", error);
     return res.status(500).json({ error: error.message });
@@ -233,10 +248,62 @@ export async function postMasumiDisburse(req, res) {
 
 export async function getPartnerTechStatus(_req, res) {
   return res.json({
-    neo4j: { enabled: true, provider: "Neo4j Graph Database" },
+    neo4j: { enabled: true, provider: "Neo4j Graph Database", configured: true },
     featherless: { enabled: isFeatherlessEnabled(), provider: "Featherless AI", configured: Boolean(process.env.FEATHERLESS_API_KEY) },
     masumi: { enabled: isMasumiEnabled(), provider: "Masumi Payment Network", configured: Boolean(process.env.MASUMI_API_KEY) },
     africas_talking: { enabled: Boolean(process.env.AT_API_KEY), provider: "Africa's Talking", configured: Boolean(process.env.AT_API_KEY) },
+    lovable: { enabled: true, provider: "Lovable AI App Builder (preview)", configured: true },
+    ml_scoring: { enabled: isMlEnabled(), provider: "KaLI ML Engine (Logistic Regression, 15k pilot profiles)", configured: true },
     open_meteo: { enabled: true, provider: "Open-Meteo Free Weather API", configured: true },
   });
+}
+
+export async function getGraphData(_req, res) {
+  const { getDriver } = await import("../config/neo4j.js");
+  const session = getDriver().session();
+  try {
+    const nodeQuery = `
+      MATCH (n)
+      WHERE n:Farmer OR n:Cooperative OR n:ClimateZone OR n:Chama OR n:FarmPlot
+      RETURN n, labels(n) AS lbs
+    `;
+    const nodeResult = await session.run(nodeQuery);
+    const nodes = nodeResult.records.map((r) => {
+      const n = r.get("n").properties;
+      const lbs = r.get("lbs");
+      const type = lbs.includes("Farmer") ? "farmer"
+        : lbs.includes("Cooperative") ? "cooperative"
+        : lbs.includes("ClimateZone") ? "zone"
+        : lbs.includes("Chama") ? "chama"
+        : "plot";
+      return {
+        id: n.id,
+        nationalId: n.national_id,
+        name: n.name || "",
+        type,
+        score: n.current_spi_index ?? null,
+      };
+    });
+
+    const relQuery = `
+      MATCH (a)-[r]->(b)
+      WHERE (a:Farmer OR a:Cooperative OR a:ClimateZone OR a:Chama OR a:FarmPlot)
+        AND (b:Farmer OR b:Cooperative OR b:ClimateZone OR b:Chama OR b:FarmPlot)
+      RETURN
+        coalesce(a.id, a.national_id) AS src,
+        coalesce(b.id, b.national_id) AS tgt,
+        type(r) AS relType
+    `;
+    const relResult = await session.run(relQuery);
+    const links = relResult.records.map((r) => ({
+      source: r.get("src"),
+      target: r.get("tgt"),
+      type: r.get("relType"),
+    }));
+
+    // add IN_ZONE edges from plots to zones for visualization continuity
+    return res.json({ nodes, links });
+  } finally {
+    await session.close();
+  }
 }

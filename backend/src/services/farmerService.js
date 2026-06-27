@@ -37,9 +37,9 @@ export async function listFarmers({ status, segment, search, page = 1, pageSize 
 
   const cypher = `
     MATCH (f:Farmer)
+    ${whereClause}
     OPTIONAL MATCH (f)-[:DELIVERS_TO]->(coop:Cooperative)
     OPTIONAL MATCH (coop)-[:OPERATES_IN]->(zone:ClimateZone)
-    ${whereClause}
     RETURN f, coop, zone
     ORDER BY f.submitted_iso DESC
     SKIP $skip

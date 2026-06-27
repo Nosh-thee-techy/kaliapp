@@ -473,7 +473,7 @@ function FarmerDetailPage() {
                   <span>Officer decision · {a.decision}</span>
                   <span>{formatRelative(a.timestampIso)}</span>
                 </div>
-                <div className="mt-1 text-sm">{a.notes} · by {a.officer} · score {a.score ?? "—"}</div>
+                <div className="mt-1 text-sm">{a.notes} · by {a.officer} · score {a.score ? `${a.score.low}${a.score.high ? ` / ${a.score.high}` : ""}` : "—"}</div>
               </div>
             ))}
           </div>

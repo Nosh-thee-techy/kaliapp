@@ -15,13 +15,14 @@ import {
   getAiNarrative,
   postMasumiDisburse,
   getPartnerTechStatus,
+  getGraphData,
 } from "../controllers/scorecardController.js";
 import authRoutes from "./auth.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
-const PUBLIC = new Set(["/health", "/stats/public", "/sms"]);
+const PUBLIC = new Set(["/health", "/stats/public"]);
 
 router.use("/auth", authRoutes);
 
@@ -46,5 +47,6 @@ router.post("/farmers/:id/sms", postSmsToFarmer);
 router.get("/farmers/:id/ai-narrative", getAiNarrative);
 router.post("/farmers/:id/masumi-disburse", postMasumiDisburse);
 router.get("/partner-tech", getPartnerTechStatus);
+router.get("/graph-data", getGraphData);
 
 export default router;
