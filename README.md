@@ -287,6 +287,7 @@ Run from the **repository root**:
 
 | Guide | Description |
 |-------|-------------|
+| [Neo4j Graph Engine](docs/NEO4J_GRAPH_ENGINE.md) | **Technical deep dive:** schema, Cypher scoring, climate contagion, ground-truth |
 | [Product Guide](docs/PRODUCT_GUIDE.md) | What KaLI does, feature tour, scoring layers (with images) |
 | [User Journeys](docs/USER_JOURNEYS.md) | Farmer, officer, agronomist, USSD flows |
 | [Ground Truth Loop](docs/GROUND_TRUTH_LOOP.md) | Advisory → verify → credit bonus |
