@@ -5,12 +5,14 @@ import farmerImg from "@/assets/farmer.jpg";
 import { useI18n, LANGS, type Lang } from "@/lib/i18n";
 import { getOfficer, setOfficer } from "@/lib/officer-session";
 import { loginOfficer, registerOfficer } from "@/lib/api-core";
+import { homeRouteForRole, normalizeRole, ROLE_LABELS, type OfficerRole } from "@/lib/roles";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
   beforeLoad: () => {
-    if (typeof window !== "undefined" && getOfficer()?.token) {
-      throw redirect({ to: "/dashboard" });
+    const officer = typeof window !== "undefined" ? getOfficer() : null;
+    if (officer?.token) {
+      throw redirect({ to: homeRouteForRole(officer.role) });
     }
   },
   head: () => ({
@@ -31,6 +33,7 @@ function AuthPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<OfficerRole>("officer");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,6 +50,7 @@ function AuthPage() {
       setName("");
       setEmail("");
       setPassword("");
+      setRole("officer");
     } else {
       setEmail("jane.mwangi@kali.co.ke");
       setPassword("KaliBranch2026!");
@@ -61,15 +65,17 @@ function AuthPage() {
       const result =
         mode === "signin"
           ? await loginOfficer(email, password)
-          : await registerOfficer({ name, email, password, branch: "Naivasha" });
+          : await registerOfficer({ name, email, password, branch: "Naivasha", role });
+      const officerRole = normalizeRole(result.officer.role);
       setOfficer({
         name: result.officer.name,
         email: result.officer.email,
         branch: result.officer.branch,
+        role: officerRole,
         token: result.token,
       });
       toast.success(mode === "signin" ? "Signed in" : "Account created");
-      await navigate({ to: "/dashboard", replace: true });
+      await navigate({ to: homeRouteForRole(officerRole), replace: true });
     } catch (err) {
       let msg = err instanceof Error ? err.message : "Sign-in failed";
       if (msg.includes("already exists")) {
@@ -134,7 +140,31 @@ function AuthPage() {
 
             <form onSubmit={onSubmit} className="mt-8 space-y-4">
               {mode === "register" && (
-                <Field label="Name" placeholder="Jane Mwangi" value={name} onChange={(e) => setName(e.target.value)} />
+                <>
+                  <Field label="Name" placeholder="Jane Mwangi" value={name} onChange={(e) => setName(e.target.value)} />
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Role</label>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {(["officer", "agronomist"] as const).map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setRole(r)}
+                          className={`rounded-2xl border px-4 py-3 text-left text-sm transition-colors ${
+                            role === r
+                              ? "border-primary bg-primary/5 text-foreground"
+                              : "border-border bg-card text-muted-foreground hover:border-primary/30"
+                          }`}
+                        >
+                          <span className="block font-semibold">{ROLE_LABELS[r]}</span>
+                          <span className="mt-0.5 block text-[11px] opacity-80">
+                            {r === "agronomist" ? "Field Intelligence & farm verification" : "Portfolio, scorecards & decisions"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
               )}
               <Field
                 label={t("auth.email")}

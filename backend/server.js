@@ -13,7 +13,7 @@ const corsOrigins = process.env.CORS_ORIGIN
   : ["http://localhost:3000", "http://localhost:5173"];
 
 app.use(cors({ origin: corsOrigins }));
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", apiRoutes);
@@ -29,6 +29,7 @@ app.get("/", (_req, res) => {
       scorecard: "GET /api/scorecard/:id",
       decision: "POST /api/farmers/:id/decision",
       ingest: "POST /api/ingest (USSD/Voice/Officer unified pipeline)",
+      voice: "GET /api/voice | POST /api/voice/stt | POST /api/voice/tts | POST /api/voice/sts",
       map: "GET /api/map/farmers (Bearer JWT)",
       events: "GET /api/events/stream?token=JWT (SSE live map)",
       ussd: "POST /ussd/ussd | POST /ussd/callback | POST /ussd/voice",

@@ -1,6 +1,9 @@
 import neo4j from "neo4j-driver";
 import { getDriver } from "../config/neo4j.js";
 import { sendSms } from "./africasTalking.js";
+import { buildScoringContext } from "./explainabilityService.js";
+import { generateFarmerExplainer } from "./featherlessService.js";
+import { normalizeLang } from "../config/languages.js";
 
 export async function listFarmers({ status, segment, search, page = 1, pageSize = 50 } = {}) {
   const session = getDriver().session();
@@ -86,7 +89,7 @@ export async function listFarmers({ status, segment, search, page = 1, pageSize 
   }
 }
 
-export async function recordDecision(lookup, { decision, stance, notes, officer, score }) {
+export async function recordDecision(lookup, { decision, stance, notes, officer, score, lang = "en" }) {
   const session = getDriver().session();
   const statusMap = {
     Approved: "disbursed",
@@ -94,6 +97,30 @@ export async function recordDecision(lookup, { decision, stance, notes, officer,
     Declined: "escalated",
   };
   const newStatus = statusMap[decision] || "ready_for_review";
+  const decisionStance =
+    decision === "Approved" ? "APPROVED" : decision === "Declined" ? "DECLINE" : "REFER";
+
+  const scoreHint = decision === "Approved" ? "Approved" : decision;
+  const scorePart = score != null ? `KaLI Rating: ${score}/100. ` : "";
+  let smsBody = `${scorePart}${scoreHint}. ${notes ? notes.slice(0, 80) : "Contact your branch officer for details."}`;
+
+  try {
+    const context = await buildScoringContext(lookup);
+    if (context) {
+      if (score != null) {
+        context.aggregate_score = score;
+        if (context.unified) context.unified.canonical_score = score;
+      }
+      const explained = await generateFarmerExplainer(
+        { ...context, stance: decisionStance },
+        normalizeLang(lang),
+        { maxChars: 160, channel: "decision" },
+      );
+      if (explained?.message) smsBody = explained.message;
+    }
+  } catch (err) {
+    console.warn("[decision→sms]", err.message);
+  }
 
   const cypher = `
     MATCH (f:Farmer)
@@ -125,10 +152,6 @@ export async function recordDecision(lookup, { decision, stance, notes, officer,
     CREATE (f)-[:NOTIFIED]->(sms)
     RETURN f, a, sms
   `;
-
-  const scoreHint = decision === "Approved" ? "Approved" : decision;
-  const scorePart = score != null ? `KaLI Rating: ${score}/100. ` : "";
-  const smsBody = `${scorePart}${scoreHint}. ${notes ? notes.slice(0, 80) : "Contact your branch officer for details."}`;
 
   try {
     const result = await session.run(cypher, {
@@ -179,6 +202,13 @@ export async function recordSmsSent(lookup, { body, category = "officer" }) {
   } finally {
     await session.close();
   }
+}
+
+/** Record outbound SMS for a farmer matched by phone (simulator / voice channel). */
+export async function recordSmsByPhone(phone, { body, category = "explainability" }) {
+  const farmer = await findFarmerByPhone(phone);
+  if (!farmer) return null;
+  return recordSmsSent(farmer.id || farmer.national_id, { body, category });
 }
 
 export async function registerFarmerFromUssd({

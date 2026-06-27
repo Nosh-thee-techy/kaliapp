@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { CloudRain, Loader2, MapPin, Radio, Thermometer, Wind } from "lucide-react";
-import { requireOfficerSession } from "@/lib/require-officer";
+import { requireBranchOfficerSession } from "@/lib/require-officer";
 import { KenyaMap } from "@/components/KenyaMap";
 import {
   fetchMapFarmers,
@@ -16,7 +16,7 @@ import {
 import { getAuthToken } from "@/lib/officer-session";
 
 export const Route = createFileRoute("/map")({
-  beforeLoad: requireOfficerSession,
+  beforeLoad: requireBranchOfficerSession,
   head: () => ({ meta: [{ title: "Map Workspace — KaLI" }] }),
   component: MapWorkspacePage,
 });

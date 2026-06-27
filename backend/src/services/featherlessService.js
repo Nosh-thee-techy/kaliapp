@@ -222,19 +222,22 @@ function generateMockNarrative(farmer) {
 const FARMER_EXPLAINER_SYSTEM = `You are KaLI's farmer-facing explainability agent for eSusFarm smallholders.
 You receive graph-based credit signals (scores, cooperative history, chama, climate).
 NEVER mention SHAP, machine learning, algorithms, or model internals.
-Write ONE encouraging SMS in the requested language.
-Focus on ONE realistic next action the farmer can take to improve standing.
+Write ONE short SMS in the requested language that explains WHY the score or decision is what it is.
+For DECLINE or REFER: lead with the main reason lenders are cautious — use plain language from the top gap.
+For APPROVED: confirm positively and briefly say what worked (e.g. co-op history).
+Do NOT list step-by-step actions, bullet points, or a to-do checklist — those live on the My Readiness portal only.
+You may end with "Steps on My Readiness" only if it fits within the character limit.
 Max 155 characters. No quotes. Plain text only.`;
 
 /**
  * Compress complex graph scoring into a localized ≤160 char farmer SMS (eSusFarm explainability).
  */
-export async function generateFarmerExplainer(context, lang = "en", { maxChars = 160 } = {}) {
+export async function generateFarmerExplainer(context, lang = "en", { maxChars = 160, channel = "readiness" } = {}) {
   const language = normalizeLang(lang);
   const langName = SUPPORTED_LANGS[language]?.featherless || "English";
 
   if (!ENABLED) {
-    return mockFarmerExplainer(context, language, maxChars);
+    return mockFarmerExplainer(context, language, maxChars, channel);
   }
 
   const topDriver = context.drivers?.[0];
@@ -243,16 +246,17 @@ export async function generateFarmerExplainer(context, lang = "en", { maxChars =
   const score = context.unified?.canonical_score ?? context.aggregate_score ?? 0;
 
   const payload = `Language: ${langName}
+Channel: ${channel}
 Stance: ${stance}
 Score: ${score}/100
 Crop: ${context.crop_type || "unknown"}
 Cooperative: ${context.cooperative || "none"}
-Top strength: ${topDriver ? `${topDriver.label} (+${topDriver.points})` : "building history"}
-Top gap: ${topDrag ? `${topDrag.label} (-${topDrag.points})` : "none critical"}
+Top strength: ${topDriver ? `${topDriver.label} — ${topDriver.detail || ""} (+${topDriver.points})` : "building history"}
+Top gap (explain this in plain language): ${topDrag ? `${topDrag.label} — ${topDrag.detail || ""} (-${topDrag.points})` : "none critical"}
 Climate SPI: ${context.climate?.spi ?? "n/a"}
 Climate advisory: ${context.climate?.advisory || "none"}
 
-Write the SMS now.`;
+Write the WHY-only SMS now. No action checklist.`;
 
   try {
     const raw = await chatCompletion(
@@ -272,7 +276,7 @@ Write the SMS now.`;
     };
   } catch (err) {
     console.warn("[featherless] farmer explainer failed:", err.message);
-    return mockFarmerExplainer(context, language, maxChars);
+    return mockFarmerExplainer(context, language, maxChars, channel);
   }
 }
 
@@ -283,27 +287,85 @@ function compressSms(text, max) {
   return `${cleaned.slice(0, max - 1).trim()}…`;
 }
 
-function mockFarmerExplainer(context, lang, maxChars) {
+function plainWhyFromDrag(drag, lang) {
+  if (!drag) {
+    return lang === "sw"
+      ? "taarifa za mkopo bado ni chache kwa wakopeshaji"
+      : lang === "lg"
+        ? "ebikwata ku ssente tebimala eri abawola"
+        : "lenders still need more trust signals on your profile";
+  }
+  if (drag.detail) return drag.detail;
+  const label = drag.label || "";
+  const maps = {
+    en: {
+      "No cooperative history": "no verified co-op delivery history yet",
+      "No collateral or substitute": "no collateral or chama substitute on file",
+      "Climate stress": "climate stress in your zone affects repayment risk",
+      "Low mobile money activity": "M-Pesa activity is too low for lenders to verify income",
+      "Weak chama savings": "chama savings history is still short",
+    },
+    sw: {
+      "No cooperative history": "hakuna historia ya usafirishaji kwa ushirika",
+      "No collateral or substitute": "hakuna dhamana au chama kilichothibitishwa",
+      "Climate stress": "hali ya hewa inaongeza hatari ya malipo",
+      "Low mobile money activity": "M-Pesa haitoshi kuonyesha mapato",
+      "Weak chama savings": "historia fupi ya akiba ya chama",
+    },
+    lg: {
+      "No cooperative history": "tewali byafaayo by'okuwaayo ebirime mu kibiina",
+      "No collateral or substitute": "tewali buwazizo oba chama eky'okwesiga",
+      "Climate stress": "obudde obuzibu bukendeeza obwesige",
+      "Low mobile money activity": "ensimbi ku ssimu ntono okulaga income",
+      "Weak chama savings": "okutereka mu chama tekunnaba kumala",
+    },
+  };
+  const bucket = maps[lang] || maps.en;
+  return bucket[label] || label.toLowerCase();
+}
+
+function mockFarmerExplainer(context, lang, maxChars, channel = "readiness") {
   const score = context.unified?.canonical_score ?? context.aggregate_score ?? 50;
   const stance = context.stance || "REFER";
-  const drag = context.drags?.[0]?.label;
-  const crop = context.crop_type || "crop";
+  const topDrag = context.drags?.[0];
+  const topDriver = context.drivers?.[0];
+  const why = plainWhyFromDrag(topDrag, lang);
+  const strength = topDriver?.detail || topDriver?.label || "";
+  const isDecision = channel === "decision";
 
   const templates = {
     en: {
-      APPROVED: `KaLI: Score ${score}/100 — approved! Deliver ${crop} on time to your co-op. M-Pesa soon.`,
-      DECLINE: `KaLI: Score ${score}/100. ${drag ? `Try: ${drag.slice(0, 40)}.` : "Join a verified chama to strengthen your case."}`,
-      REFER: `KaLI: Score ${score}/100 — under review. Keep co-op deliveries steady this season.`,
+      APPROVED: isDecision
+        ? `KaLI: Approved (${score}/100). ${strength ? `Because ${strength.slice(0, 45)}.` : "Strong profile."} Disbursement next.`
+        : `KaLI: ${score}/100 — ready. ${strength ? strength.slice(0, 50) : "Co-op history looks good."}`,
+      DECLINE: isDecision
+        ? `KaLI: Not approved (${score}/100). Main reason: ${why.slice(0, 55)}. Steps on My Readiness.`
+        : `KaLI: ${score}/100 — not ready yet. Why: ${why.slice(0, 55)}. Steps on My Readiness.`,
+      REFER: isDecision
+        ? `KaLI: Under review (${score}/100). Why: ${why.slice(0, 55)}. We will SMS you soon.`
+        : `KaLI: ${score}/100 — under review. Why: ${why.slice(0, 55)}. We will update you by SMS.`,
     },
     sw: {
-      APPROVED: `KaLI: Alama ${score}/100 — imeidhinishwa! Wasilisha ${crop} kwa ushirika. M-Pesa inakuja.`,
-      DECLINE: `KaLI: Alama ${score}/100. ${drag ? `Jaribu: ${drag.slice(0, 35)}.` : "Jiunge na chama ili kuimarisha ombi."}`,
-      REFER: `KaLI: Alama ${score}/100 — inakaguliwa. Endelea kusafirisha mazao kwa ushirika.`,
+      APPROVED: isDecision
+        ? `KaLI: Imeidhinishwa (${score}/100). ${strength ? strength.slice(0, 40) : "Wasifu imara."} Malipo yanakuja.`
+        : `KaLI: Alama ${score}/100 — uko tayari. ${strength ? strength.slice(0, 45) : "Historia ya ushirika nzuri."}`,
+      DECLINE: isDecision
+        ? `KaLI: Haijaidhinishwa (${score}/100). Sababu: ${why.slice(0, 48)}. Hatua kwenye My Readiness.`
+        : `KaLI: Alama ${score}/100 — bado hauko tayari. Kwa nini: ${why.slice(0, 48)}. Hatua kwenye My Readiness.`,
+      REFER: isDecision
+        ? `KaLI: Inakaguliwa (${score}/100). Kwa nini: ${why.slice(0, 48)}. Tutakutumia SMS.`
+        : `KaLI: Alama ${score}/100 — inakaguliwa. Kwa nini: ${why.slice(0, 48)}. Tutakujulisha kwa SMS.`,
     },
     lg: {
-      APPROVED: `KaLI: Obubonero ${score}/100 — kkiriziddwa! Waayo ${crop} mu kibiina. M-Pesa ejja.`,
-      DECLINE: `KaLI: Obubonero ${score}/100. ${drag ? `Gezaako: ${drag.slice(0, 35)}.` : "Weegatte ku kibiina eky'okwesiga."}`,
-      REFER: `KaLI: Obubonero ${score}/100 — kikeberwa. Sigala ng'owa ebirime mu kibiina.`,
+      APPROVED: isDecision
+        ? `KaLI: Kkiriziddwa (${score}/100). ${strength ? strength.slice(0, 40) : "Profile nnungi."} Ensimbi ejja.`
+        : `KaLI: Obubonero ${score}/100 — oli bulungi. ${strength ? strength.slice(0, 45) : "Eby'okukola mu kibiina birungi."}`,
+      DECLINE: isDecision
+        ? `KaLI: Tekikkiriziddwa (${score}/100). Ensonga: ${why.slice(0, 48)}. Emirimu ku My Readiness.`
+        : `KaLI: Obubonero ${score}/100 — tonnaba. Lwaki: ${why.slice(0, 48)}. Emirimu ku My Readiness.`,
+      REFER: isDecision
+        ? `KaLI: Kikeberwa (${score}/100). Lwaki: ${why.slice(0, 48)}. Tujja kukusindika SMS.`
+        : `KaLI: Obubonero ${score}/100 — kikeberwa. Lwaki: ${why.slice(0, 48)}. Tujja kukutegeeza.`,
     },
   };
 
@@ -312,16 +374,78 @@ function mockFarmerExplainer(context, lang, maxChars) {
 
   return {
     message,
-    actionHint: drag || null,
+    actionHint: topDrag?.label || null,
     model: "KaLI Local Explainer",
     provider: "KaLI Fallback",
   };
 }
 
-const READINESS_ACTIONS_SYSTEM = `You help smallholder farmers improve credit readiness.
+const READINESS_ACTIONS_SYSTEM = `You help smallholder farmers improve credit readiness on the My Readiness portal.
 Output ONLY JSON: { "actions": ["step1", "step2", "step3"] }
 Rules: max 3 actions, each under 90 characters, practical, encouraging, no ML jargon.
+These are portal checklist items ONLY — never format as SMS text.
 Language must match the user request exactly.`;
+
+const KALI_VOICE_SYSTEM = `You are Kali, KaLI's voice assistant for East African smallholder farmers.
+You speak warmly in the farmer's language (English, Kiswahili, or Luganda).
+Help them understand credit readiness, scores, and next actions from their profile.
+NEVER mention SHAP, machine learning, algorithms, or model internals.
+Keep replies to 2–4 short spoken sentences. Plain text only — no markdown, no quotes.`;
+
+/** Conversational voice reply for the Kali readiness portal. */
+export async function generateKaliVoiceReply(userMessage, lang = "en", context = {}) {
+  const language = normalizeLang(lang);
+  const langName = SUPPORTED_LANGS[language]?.featherless || "English";
+
+  if (!ENABLED) {
+    return mockKaliVoiceReply(userMessage, language, context);
+  }
+
+  const nextAction =
+    context.actionPoints?.find((a) => !a.done)?.title ||
+    context.macroAdvisory ||
+    null;
+
+  const payload = `Language: ${langName}
+Farmer: ${context.farmerName || "farmer"}
+Readiness score: ${context.score ?? "unknown"}/100
+Status: ${context.label || context.stance || "building"}
+Crop: ${context.crop || "mixed"}
+Cooperative: ${context.cooperative || "none"}
+Why message (SMS-style, no actions): ${context.whyMessage || context.headline || "none"}
+Next portal action: ${nextAction || "see action list on My Readiness"}
+Zone advisory: ${context.macroAdvisory || "none"}
+
+Farmer asked: "${userMessage}"
+
+Reply as Kali in ${langName}.`;
+
+  try {
+    const raw = await chatCompletion(
+      [
+        { role: "system", content: KALI_VOICE_SYSTEM },
+        { role: "user", content: payload },
+      ],
+      { maxTokens: 180, temperature: 0.4 },
+    );
+    return raw.replace(/^["']|["']$/g, "").replace(/\s+/g, " ").trim();
+  } catch (err) {
+    console.warn("[featherless] kali voice failed:", err.message);
+    return mockKaliVoiceReply(userMessage, language, context);
+  }
+}
+
+function mockKaliVoiceReply(_message, lang, context) {
+  const name = context.farmerName || "friend";
+  const score = context.score ?? 50;
+  const next = context.actionPoints?.find((a) => !a.done)?.title;
+  const templates = {
+    en: `Hello ${name}, your readiness score is ${score} out of 100. ${next ? `Your next step is: ${next}.` : "Keep delivering to your cooperative every season."} Ask me anything about your profile.`,
+    sw: `Habari ${name}, alama yako ya uwezo wa mkopo ni ${score} kati ya 100. ${next ? `Hatua yako inayofuata: ${next}.` : "Endelea kusafirisha mazao kwa ushirika kila msimu."} Uliza chochote kuhusu wasifu wako.`,
+    lg: `Oli ${name}, obubonero bwo okwesiga ssente bwe ${score} ku 100. ${next ? `Ekintu ekiddako: ${next}.` : "Sigala ng'owa ebirime mu kibiina buli sizoni."} Buuza ekintu kyonna ku by'okukola.`,
+  };
+  return templates[lang] || templates.en;
+}
 
 /** 2–3 digitized action points for the farmer readiness portal. */
 export async function generateReadinessActions(context, lang = "en") {

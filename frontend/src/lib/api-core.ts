@@ -142,7 +142,7 @@ export type SmsMessage = {
   farmerId?: string;
   to: string;
   body: string;
-  category: "decision" | "climate" | "registration";
+  category: "decision" | "climate" | "registration" | "explainability" | "officer";
   sentIso: string;
 };
 
@@ -405,7 +405,7 @@ export async function postUssdSession(body: {
 
 export type AuthResult = {
   token: string;
-  officer: { name: string; email: string; branch: string };
+  officer: { name: string; email: string; branch: string; role?: string };
 };
 
 export async function loginOfficer(email: string, password: string): Promise<AuthResult> {
@@ -417,6 +417,7 @@ export async function registerOfficer(body: {
   email: string;
   password: string;
   branch?: string;
+  role?: "officer" | "agronomist";
 }): Promise<AuthResult> {
   return authFetch<AuthResult>("/api/auth/register", body);
 }
@@ -644,9 +645,92 @@ export async function postAgentChat(body: {
   message: string;
   lookup?: string;
   lang?: string;
-  mode?: "auto" | "parse" | "explain";
+  mode?: "auto" | "parse" | "explain" | "voice";
+  context?: Record<string, unknown>;
 }): Promise<AgentChatResponse> {
   return graphFetch("/api/agent/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function postAgentVoiceChat(body: {
+  message: string;
+  lookup: string;
+  lang?: string;
+  context?: Record<string, unknown>;
+}): Promise<{ type: "voice"; lang: string; reply: string; provider?: string }> {
+  return graphFetch("/api/agent/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...body, mode: "voice" }),
+  });
+}
+
+export async function fetchKaliTts(text: string, lang = "en"): Promise<Blob> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 45_000);
+  try {
+    const res = await fetch(apiPath("/api/voice/tts"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, lang, format: "binary" }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `TTS ${res.status}`);
+    }
+    return res.blob();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export type VoiceStsResponse = {
+  transcript: string;
+  reply: string;
+  lang: string;
+  mimeType: string;
+  audio: string | null;
+  providers: { stt: string | null; brain: string; tts: string | null };
+};
+
+export type VoiceConfig = {
+  enabled: boolean;
+  ttsModel: string;
+  sttModel: string;
+  languages: { code: string; label: string; sttCode: string; voiceId: string }[];
+  capabilities: string[];
+};
+
+export async function fetchVoiceConfig(): Promise<VoiceConfig> {
+  return graphFetch("/api/voice");
+}
+
+/** Speech-to-speech: ElevenLabs STT → Featherless → ElevenLabs TTS */
+export async function postVoiceSts(body: {
+  audio?: string;
+  mimeType?: string;
+  message?: string;
+  lang?: string;
+  context?: Record<string, unknown>;
+}): Promise<VoiceStsResponse> {
+  return graphFetch("/api/voice/sts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Speech-to-text only (ElevenLabs Scribe) */
+export async function postVoiceStt(body: {
+  audio: string;
+  mimeType?: string;
+  lang?: string;
+}): Promise<{ text: string; lang: string; provider: string }> {
+  return graphFetch("/api/voice/stt", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -733,6 +817,7 @@ export type FarmerReadiness = {
     label: string;
   };
   headline: string | null;
+  whyMessage?: string | null;
   macroAdvisory?: string | null;
   actionPoints: ReadinessAction[];
   groundTruth?: {

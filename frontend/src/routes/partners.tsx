@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { fetchPartnerTechStatus } from "@/lib/api-core";
 import type { PartnerTechStatus } from "@/lib/api-core";
-import { requireOfficerSession } from "@/lib/require-officer";
+import { requireBranchOfficerSession } from "@/lib/require-officer";
 import { Sprout, ExternalLink, CheckCircle2, XCircle, Server, Cpu, Wallet, MessageSquare, Globe, CloudSun, Puzzle } from "lucide-react";
 
 export const Route = createFileRoute("/partners")({
-  beforeLoad: requireOfficerSession,
+  beforeLoad: requireBranchOfficerSession,
   head: () => ({
     meta: [
       { title: "Partner Technology — KaLI" },

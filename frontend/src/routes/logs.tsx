@@ -3,12 +3,12 @@ import { useEffect, useState } from "react";
 import { auditLog, pipelineRuns, formatRelative, type PipelineRun } from "@/lib/mock-data";
 import { fetchAuditLog, fetchPipeline, syncClimatePipeline } from "@/lib/api-core";
 import type { AuditEntry } from "@/lib/api-core";
-import { requireOfficerSession } from "@/lib/require-officer";
+import { requireBranchOfficerSession } from "@/lib/require-officer";
 import { toast } from "sonner";
 import { CloudRain } from "lucide-react";
 
 export const Route = createFileRoute("/logs")({
-  beforeLoad: requireOfficerSession,
+  beforeLoad: requireBranchOfficerSession,
   head: () => ({
     meta: [
       { title: "Pipeline & Logs — KaLI" },
@@ -55,7 +55,7 @@ function LogsPage() {
               officer: a.officer,
               decision: a.decision,
               notes: a.notes,
-              score: a.score,
+              score: { low: a.score, high: a.score },
               timestampIso: a.timestampIso,
             })),
           );

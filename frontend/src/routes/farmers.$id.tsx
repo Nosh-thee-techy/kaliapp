@@ -9,9 +9,13 @@ import {
   smsOutbox,
   auditLog,
   type Farmer,
+  type DemographicSegment,
+  type ApplicationStatus,
+  type ClimateSignal,
+  type ScoreBreakdown,
 } from "@/lib/mock-data";
 import { fetchGraphScorecard, fetchAuditLog, fetchSmsMessages, postSmsToFarmer } from "@/lib/api-core";
-import type { GraphScorecard, SmsMessage, AuditEntry } from "@/lib/api-core";
+import type { GraphScorecard, SmsMessage, AuditEntry, GraphScoreDriver } from "@/lib/api-core";
 import { toast } from "sonner";
 import {
   ResponsiveContainer,
@@ -48,11 +52,11 @@ import {
   FileText,
   MessageSquare,
 } from "lucide-react";
-import { requireOfficerSession } from "@/lib/require-officer";
+import { requireBranchOfficerSession } from "@/lib/require-officer";
 import { SadnessErrorPage } from "@/components/SadnessErrorPage";
 
 export const Route = createFileRoute("/farmers/$id")({
-  beforeLoad: requireOfficerSession,
+  beforeLoad: requireBranchOfficerSession,
   head: ({ params }) => ({
     meta: [
       { title: `Farmer ${params.id} — KaLI` },
@@ -91,6 +95,65 @@ export const Route = createFileRoute("/farmers/$id")({
 
 const MONTHS = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
 
+type FarmerLoaderData =
+  | { source: "graph"; graph: GraphScorecard; audit: AuditEntry[]; sms: SmsMessage[] }
+  | { source: "mock"; farmer: Farmer };
+
+type DetailScore = {
+  total: number;
+  band: ScoreBreakdown["band"];
+  drivers: GraphScoreDriver[];
+  drags: GraphScoreDriver[];
+  assetSubstituteApplied: boolean;
+};
+
+function buildFarmerDetailView(data: FarmerLoaderData) {
+  if (data.source === "graph") {
+    const { graph, audit, sms } = data;
+    return {
+      farmer: graphToFarmer(graph),
+      climate: {
+        zoneCode: graph.climate.zone_code,
+        spi: graph.climate.spi,
+        rainfallMmLast30d: graph.climate.rainfall_mm_last_30d,
+        pestProximityKm: graph.climate.pest_proximity_km,
+        advisory: graph.climate.advisory ?? undefined,
+        lastSyncIso: graph.climate.last_sync_iso || new Date().toISOString(),
+      } satisfies ClimateSignal,
+      score: {
+        total: graph.total,
+        band: graph.band,
+        drivers: graph.drivers,
+        drags: graph.drags,
+        assetSubstituteApplied: graph.asset_substitute_applied,
+      } satisfies DetailScore,
+      smsTrail: sms,
+      auditTrail: audit,
+    };
+  }
+
+  const { farmer } = data;
+  const climate = climateSignals[farmer.zoneCode];
+  return {
+    farmer,
+    climate,
+    score: computeScore(farmer, climate),
+    smsTrail: smsOutbox.filter((s) => s.farmerId === farmer.id).map((s) => ({ ...s })),
+    auditTrail: auditLog
+      .filter((a) => a.farmerId === farmer.id)
+      .map((a) => ({
+        id: a.id,
+        farmerId: a.farmerId,
+        farmerName: a.farmerName,
+        officer: a.officer,
+        decision: a.decision,
+        notes: a.notes,
+        score: { low: a.score, high: a.score },
+        timestampIso: a.timestampIso,
+      })),
+  };
+}
+
 function graphToFarmer(g: GraphScorecard): Farmer {
   return {
     id: g.id,
@@ -119,49 +182,9 @@ function graphToFarmer(g: GraphScorecard): Farmer {
 }
 
 function FarmerDetailPage() {
-  const data = Route.useLoaderData();
+  const data = Route.useLoaderData() as FarmerLoaderData;
   const navigate = useNavigate();
-  const farmer = data.source === "graph" ? graphToFarmer(data.graph) : data.farmer;
-  const climate =
-    data.source === "graph"
-      ? {
-          zoneCode: data.graph.climate.zone_code,
-          spi: data.graph.climate.spi,
-          rainfallMmLast30d: data.graph.climate.rainfall_mm_last_30d,
-          pestProximityKm: data.graph.climate.pest_proximity_km,
-          advisory: data.graph.climate.advisory ?? undefined,
-          lastSyncIso: data.graph.climate.last_sync_iso || new Date().toISOString(),
-        }
-      : climateSignals[farmer.zoneCode];
-  const score =
-    data.source === "graph"
-      ? {
-          total: data.graph.total,
-          band: data.graph.band,
-          drivers: data.graph.drivers,
-          drags: data.graph.drags,
-          assetSubstituteApplied: data.graph.asset_substitute_applied,
-        }
-      : computeScore(farmer, climate);
-  const smsTrail: SmsMessage[] =
-    data.source === "graph"
-      ? data.sms
-      : smsOutbox.filter((s) => s.farmerId === farmer.id).map((s) => ({ ...s }));
-  const auditTrail: AuditEntry[] =
-    data.source === "graph"
-      ? data.audit
-      : auditLog
-          .filter((a) => a.farmerId === farmer.id)
-          .map((a) => ({
-            id: a.id,
-            farmerId: a.farmerId,
-            farmerName: a.farmerName,
-            officer: a.officer,
-            decision: a.decision,
-            notes: a.notes,
-            score: a.score,
-            timestampIso: a.timestampIso,
-          }));
+  const { farmer, climate, score, smsTrail, auditTrail } = buildFarmerDetailView(data);
 
   const monthlyBase = farmer.mobileMoneyInflowsKes / 12;
 
@@ -205,8 +228,8 @@ function FarmerDetailPage() {
         <div className="relative overflow-hidden rounded-3xl bg-gradient-forest p-7 text-primary-foreground shadow-elevated texture-leaf">
           <div className="relative z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-6 sm:flex sm:flex-wrap sm:justify-between">
             <div className="min-w-0">
-              <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${SEGMENT_META[farmer.segment].tone}`}>
-                {SEGMENT_META[farmer.segment].label} · {farmer.vulnerabilityTag}
+              <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${SEGMENT_META[farmer.segment as DemographicSegment].tone}`}>
+                {SEGMENT_META[farmer.segment as DemographicSegment].label} · {farmer.vulnerabilityTag}
               </span>
               <h1 className="mt-3 font-display text-3xl font-semibold leading-tight sm:text-5xl">
                 {farmer.name}
@@ -259,7 +282,7 @@ function FarmerDetailPage() {
             <div>
               <div className="text-[10px] uppercase tracking-[0.18em] text-accent">KaLI Score</div>
               <div className="mt-1 font-display text-2xl font-semibold">{score.band}</div>
-              <div className="text-xs text-muted-foreground">{STATUS_META[farmer.status].label}</div>
+              <div className="text-xs text-muted-foreground">{STATUS_META[farmer.status as ApplicationStatus].label}</div>
             </div>
             <div className="h-32 w-32">
               <ResponsiveContainer width="100%" height="100%">
@@ -440,10 +463,10 @@ function FarmerDetailPage() {
         <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
           <h3 className="font-display text-lg font-semibold">Why this score?</h3>
           <div className="mt-4 space-y-2">
-            {score.drivers.map((d, i) => (
+            {score.drivers.map((d: GraphScoreDriver, i: number) => (
               <DriverRow key={`d${i}`} sign="+" label={d.label} detail={d.detail} points={d.points} positive />
             ))}
-            {score.drags.map((d, i) => (
+            {score.drags.map((d: GraphScoreDriver, i: number) => (
               <DriverRow key={`g${i}`} sign="" label={d.label} detail={d.detail} points={d.points} />
             ))}
           </div>

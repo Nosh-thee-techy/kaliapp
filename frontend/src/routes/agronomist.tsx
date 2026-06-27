@@ -26,10 +26,10 @@ import {
   type AgronomistZone,
 } from "@/lib/api-core";
 import { getOfficer } from "@/lib/officer-session";
-import { requireOfficerSession } from "@/lib/require-officer";
+import { requireAgronomistSession } from "@/lib/require-officer";
 
 export const Route = createFileRoute("/agronomist")({
-  beforeLoad: requireOfficerSession,
+  beforeLoad: requireAgronomistSession,
   head: () => ({
     meta: [
       { title: "Field Intelligence — KaLI Agronomist" },
@@ -505,14 +505,6 @@ function VerifyPanel({
                   className="mt-2 w-full resize-none rounded-2xl border border-border/80 bg-white px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15"
                 />
               </div>
-
-              <Link
-                to="/scorecard/$id"
-                params={{ id: item.farmerId }}
-                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-              >
-                Open full scorecard <ChevronRight className="h-3 w-3" />
-              </Link>
             </div>
           ) : null}
         </div>

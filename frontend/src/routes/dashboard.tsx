@@ -29,11 +29,11 @@ import { getOfficer } from "@/lib/officer-session";
 import { toast } from "sonner";
 import type { PortfolioStats } from "@/lib/api-core";
 import { useI18n } from "@/lib/i18n";
-import { requireOfficerSession } from "@/lib/require-officer";
+import { requireBranchOfficerSession } from "@/lib/require-officer";
 import { useOfficerChrome } from "@/lib/officer-chrome";
 
 export const Route = createFileRoute("/dashboard")({
-  beforeLoad: requireOfficerSession,
+  beforeLoad: requireBranchOfficerSession,
   head: () => ({
     meta: [
       { title: "Dashboard — KaLI" },

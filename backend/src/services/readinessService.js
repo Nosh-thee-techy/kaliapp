@@ -201,6 +201,7 @@ export async function getFarmerReadiness(rawLookup, lang = "en") {
                 ? "Zimba obwesige"
                 : "Building trust",
     },
+    whyMessage: explained.farmer?.sms || null,
     headline: explained.farmer?.sms || null,
     macroAdvisory: groundTruth?.advisory || advisory,
     actionPoints,

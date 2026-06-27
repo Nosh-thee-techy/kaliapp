@@ -122,17 +122,27 @@ async function main() {
         email: "jane.mwangi@kali.co.ke",
         name: "Jane Mwangi",
         branch: "Naivasha",
+        role: "officer",
         password: "KaliBranch2026!",
       },
       {
         email: "j.mwangi@kali.co.ke",
         name: "James Mwangi",
         branch: "Naivasha",
+        role: "officer",
         password: "KaliBranch2026!",
       },
+      {
+        email: "field@kali.co.ke",
+        name: "Grace Akinyi",
+        branch: "Naivasha",
+        role: "agronomist",
+        password: "KaliField2026!",
+      },
     ]);
-    console.log("[seed] 2 Officer accounts ready.");
-    console.log(`[seed] Demo credentials: jane.mwangi@kali.co.ke / KaliBranch2026!`);
+    console.log("[seed] 3 Officer accounts ready.");
+    console.log(`[seed] Branch: jane.mwangi@kali.co.ke / KaliBranch2026!`);
+    console.log(`[seed] Field:  field@kali.co.ke / KaliField2026!`);
   } catch (err) {
     console.error("[seed] Failed:", err.message);
     process.exitCode = 1;

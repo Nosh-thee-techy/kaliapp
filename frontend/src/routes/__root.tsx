@@ -23,6 +23,7 @@ import { I18nProvider, useI18n, LANGS, type Lang } from "../lib/i18n";
 import { Toaster } from "../components/ui/sonner";
 import { fetchGraphHealth } from "../lib/api-core";
 import { getOfficer, getOfficerInitials, clearOfficer } from "../lib/officer-session";
+import { isAgronomist } from "../lib/roles";
 import { SadnessErrorPage } from "../components/SadnessErrorPage";
 import { OfficerChromeProvider, useOfficerChrome } from "../lib/officer-chrome";
 import { PipelineSyncStrip } from "../components/PipelineSyncStrip";
@@ -116,15 +117,20 @@ function LanguageSwitch() {
 
 function Sidebar() {
   const { t } = useI18n();
-  const items = [
+  const officer = getOfficer();
+  const agronomist = isAgronomist(officer?.role);
+
+  const branchItems = [
     { to: "/dashboard", label: t("nav.portfolio"), icon: Home },
     { to: "/map", label: "Map", icon: MapIcon },
-    { to: "/agronomist", label: "Field", icon: Leaf },
     { to: "/farmer", label: t("nav.farmer"), icon: Smartphone },
     { to: "/logs", label: t("nav.logs"), icon: Activity },
     { to: "/graph", label: "Graph", icon: Share2 },
     { to: "/partners", label: "Tech", icon: Puzzle },
   ];
+
+  const fieldItems = [{ to: "/agronomist", label: "Field", icon: Leaf }];
+  const items = agronomist ? fieldItems : branchItems;
   return (
     <aside className="sticky top-0 z-30 flex h-screen w-20 flex-col items-center gap-1 border-r border-border bg-charcoal py-6 text-primary-foreground lg:w-24">
       <Link to="/" className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-accent-foreground shadow-lime">
@@ -160,6 +166,7 @@ function TopBar() {
   const { t } = useI18n();
   const [graphOk, setGraphOk] = useState<boolean | null>(null);
   const officer = getOfficer();
+  const agronomist = isAgronomist(officer?.role);
   const { searchQuery, setSearchQuery, searchInputRef } = useOfficerChrome();
 
   useEffect(() => {
@@ -171,18 +178,29 @@ function TopBar() {
   return (
     <header className="sticky top-0 z-20 flex h-20 items-center gap-4 border-b border-border bg-background/85 px-6 backdrop-blur-md sm:px-8">
       <div className="relative hidden flex-1 max-w-md md:block">
-        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          ref={searchInputRef}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={`${t("dashboard.search")} (/)`}
-          className="w-full rounded-full border border-border bg-card py-2.5 pl-11 pr-4 text-sm shadow-card focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-        />
+        {!agronomist && (
+          <>
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`${t("dashboard.search")} (/)`}
+              className="w-full rounded-full border border-border bg-card py-2.5 pl-11 pr-4 text-sm shadow-card focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+            />
+          </>
+        )}
+        {agronomist && (
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Leaf className="h-4 w-4 text-primary" />
+            Field Intelligence
+            <span className="text-muted-foreground">· {officer?.branch || "Naivasha"}</span>
+          </div>
+        )}
       </div>
       <div className="ml-auto flex items-center gap-3">
         <PipelineSyncStrip />
-        <LanguageSwitch />
+        {!agronomist && <LanguageSwitch />}
         <span
           className={`hidden items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs md:inline-flex ${
             graphOk

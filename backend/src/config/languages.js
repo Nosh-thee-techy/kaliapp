@@ -1,8 +1,8 @@
 /** Supported farmer-facing languages — Kenya + Uganda (eSusFarm). */
 export const SUPPORTED_LANGS = {
-  en: { code: "en", label: "English", featherless: "English" },
-  sw: { code: "sw", label: "Kiswahili", featherless: "Kiswahili" },
-  lg: { code: "lg", label: "Luganda", featherless: "Luganda" },
+  en: { code: "en", label: "English", featherless: "English", elevenLabsStt: "eng" },
+  sw: { code: "sw", label: "Kiswahili", featherless: "Kiswahili", elevenLabsStt: "swa" },
+  lg: { code: "lg", label: "Luganda", featherless: "Luganda", elevenLabsStt: "lug" },
 };
 
 export const USSD_LANG_MENU =

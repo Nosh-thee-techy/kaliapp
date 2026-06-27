@@ -136,6 +136,13 @@ MERGE (f1)-[:LOCATED_IN]->(p1);
 MERGE (peer:Farmer {id: "20104829"})
 MERGE (peer)-[:GUARANTEES]->(f1);
 
+MERGE (sms0:SmsMessage {id: "SMS-2200"})
+SET sms0.to = "+254712345678",
+    sms0.body = "KaLI: Mkopo wako unakaguliwa. Alama 78/100 — Endelea kusafirisha mazao kwa ushirika wako.",
+    sms0.category = "explainability",
+    sms0.sent_iso = toString(datetime() - duration({hours: 6}))
+MERGE (f1)-[:NOTIFIED]->(sms0);
+
 MERGE (f2:Farmer {id: "F-1043"})
 SET f2.national_id = "31220984",
     f2.name = "Joseph Kiprono",

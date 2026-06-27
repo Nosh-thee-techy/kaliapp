@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useRef, useCallback } from "react";
-import { requireOfficerSession } from "@/lib/require-officer";
+import { requireBranchOfficerSession } from "@/lib/require-officer";
 import { graphFetch } from "@/lib/api-core";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -39,7 +39,7 @@ const TYPES: Record<string, string> = {
 };
 
 export const Route = createFileRoute("/graph")({
-  beforeLoad: requireOfficerSession,
+  beforeLoad: requireBranchOfficerSession,
   head: () => ({ meta: [{ title: "Graph View — KaLI" }] }),
   component: GraphPage,
 });

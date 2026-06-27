@@ -1,9 +1,13 @@
+import type { OfficerRole } from "./roles";
+import { normalizeRole } from "./roles";
+
 const STORAGE_KEY = "kali-officer-session";
 
 export type OfficerSession = {
   name: string;
   email: string;
   branch?: string;
+  role: OfficerRole;
   token: string;
 };
 
@@ -14,7 +18,7 @@ export function getOfficer(): OfficerSession | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as OfficerSession;
     if (!parsed.token) return null;
-    return parsed;
+    return { ...parsed, role: normalizeRole(parsed.role) };
   } catch {
     return null;
   }
@@ -25,7 +29,10 @@ export function getAuthToken(): string | null {
 }
 
 export function setOfficer(session: OfficerSession) {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  sessionStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ ...session, role: normalizeRole(session.role) }),
+  );
 }
 
 export function clearOfficer() {

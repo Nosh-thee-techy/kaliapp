@@ -1,5 +1,5 @@
 import { calculateGraphScore } from "../services/scoringEngine.js";
-import { findFarmerByPhone } from "../services/farmerService.js";
+import { findFarmerByPhone, recordSmsSent } from "../services/farmerService.js";
 import { parseAfricasTalkingUssd } from "../services/africasTalking.js";
 import { handleLoanApplicationWorkflow } from "../services/underwriterAgent.js";
 import { routeExplainability } from "../services/explainabilityService.js";
@@ -24,6 +24,15 @@ function triggerIngestWorkflow(payload) {
 
 function formatUssdExplainer(lookup, lang) {
   return routeExplainability(lookup, lang, { channel: "ussd", skipOfficer: true });
+}
+
+async function deliverUssdSms(lookup, smsBody, category = "explainability") {
+  if (!lookup || !smsBody) return;
+  try {
+    await recordSmsSent(lookup, { body: smsBody, category });
+  } catch (err) {
+    console.warn("[ussd→sms]", err.message);
+  }
 }
 
 export async function handleUssd(req, res) {
@@ -143,6 +152,7 @@ export async function handleUssd(req, res) {
         if (!result?.ok) {
           response = lang === "lg" ? "END Tewali kukubisa." : lang === "sw" ? "END Hakuna ombi." : "END No application found.";
         } else {
+          await deliverUssdSms(known.id || known.national_id, result.farmer.sms);
           response = `END ${result.farmer.sms}`;
         }
       } else if (menu === "4" && known && steps.length === 2) {
@@ -150,6 +160,7 @@ export async function handleUssd(req, res) {
         if (!result?.ok) {
           response = lang === "lg" ? "END Tewali kukubisa." : lang === "sw" ? "END Hakuna rekodi." : "END No record found.";
         } else {
+          await deliverUssdSms(known.id || known.national_id, result.farmer.sms);
           response = `END ${result.farmer.sms}`;
         }
       } else if (menu === "2" && steps.length === 3) {
@@ -160,6 +171,7 @@ export async function handleUssd(req, res) {
         if (!result?.ok) {
           response = lang === "lg" ? "END Tewali kukubisa." : lang === "sw" ? "END Hakuna rekodi." : "END No matching registry.";
         } else {
+          await deliverUssdSms(result.farmerId, result.farmer.sms);
           response = `END ${result.farmer.sms}`;
         }
       } else if (menu === "3" && known && steps.length === 2) {

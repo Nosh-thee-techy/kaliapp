@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { formatRelative } from "@/lib/mock-data";
-import { fetchSmsMessages, postUssdSession, postAgentChat, fetchAgentLanguages } from "@/lib/api-core";
+import { fetchSmsMessages, postUssdSession, fetchAgentLanguages } from "@/lib/api-core";
 import type { AgentLanguage, SmsMessage } from "@/lib/api-core";
-import { Bot, Loader2 } from "lucide-react";
+import { Bot, RefreshCw } from "lucide-react";
+import { FarmerSimulatorVoice } from "@/components/FarmerSimulatorVoice";
+import type { KaliVoiceLang } from "@/lib/kali-voice";
 
 export const Route = createFileRoute("/farmer")({
   head: () => ({
@@ -31,10 +33,8 @@ function FarmerPage() {
   const [sessionEnded, setSessionEnded] = useState(false);
   const [smsList, setSmsList] = useState<SmsMessage[]>([]);
   const [smsLive, setSmsLive] = useState(false);
-  const [agentLang, setAgentLang] = useState("sw");
-  const [agentInput, setAgentInput] = useState("");
-  const [agentReply, setAgentReply] = useState<string | null>(null);
-  const [agentLoading, setAgentLoading] = useState(false);
+  const [smsRefreshing, setSmsRefreshing] = useState(false);
+  const [agentLang, setAgentLang] = useState<KaliVoiceLang>("sw");
   const [languages, setLanguages] = useState<AgentLanguage[]>([
     { code: "en", label: "English" },
     { code: "sw", label: "Kiswahili" },
@@ -48,7 +48,7 @@ function FarmerPage() {
   }, []);
 
   const loadSms = useCallback(() => {
-    fetchSmsMessages({ phone: phoneNumber, limit: 20 })
+    return fetchSmsMessages({ phone: phoneNumber, limit: 20 })
       .then((messages) => {
         setSmsList(messages);
         setSmsLive(true);
@@ -56,11 +56,20 @@ function FarmerPage() {
       .catch(() => setSmsLive(false));
   }, [phoneNumber]);
 
+  const refreshSms = useCallback(() => {
+    setSmsRefreshing(true);
+    loadSms().finally(() => setSmsRefreshing(false));
+  }, [loadSms]);
+
   useEffect(() => {
     loadSms();
-    const id = setInterval(loadSms, 8000);
+    const id = setInterval(loadSms, 3000);
     return () => clearInterval(id);
   }, [loadSms]);
+
+  function boostSmsPoll() {
+    refreshSms();
+  }
 
   async function runUssd(nextText: string | undefined) {
     setLoading(true);
@@ -70,7 +79,7 @@ function FarmerPage() {
       setDisplay(body);
       const ended = raw.startsWith("END");
       setSessionEnded(ended);
-      if (ended) loadSms();
+      if (ended) boostSmsPoll();
       return ended;
     } catch {
       setDisplay("System unavailable.\nIs the backend running?\nTry: npm run dev:api");
@@ -132,33 +141,15 @@ function FarmerPage() {
     else setInput((v) => v.slice(0, -1));
   }
 
-  async function askAgent() {
-    if (!agentInput.trim()) return;
-    setAgentLoading(true);
-    setAgentReply(null);
-    try {
-      const res = await postAgentChat({
-        message: agentInput.trim(),
-        lookup: phoneNumber,
-        lang: agentLang,
-        mode: "auto",
-      });
-      setAgentReply(res.reply);
-    } catch {
-      setAgentReply("Agent unavailable. Is the backend running?");
-    } finally {
-      setAgentLoading(false);
-    }
-  }
-
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <div>
         <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Field Channel · Zero-bandwidth</p>
         <h1 className="mt-1 font-display text-3xl font-semibold text-foreground sm:text-4xl">Farmer Phone Simulator</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Live USSD sessions via the backend graph API. Dial <span className="font-mono text-foreground">{SHORTCODE}</span>{" "}
-          — registrations and credit requests write to Neo4j and appear on the officer dashboard.
+          Point-to-point USSD and SMS — no Africa&apos;s Talking keys required. Dial{" "}
+          <span className="font-mono text-foreground">{SHORTCODE}</span>, speak with Kali, and watch real graph-backed
+          messages land in the inbox below.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <label className="text-xs font-medium text-muted-foreground">
@@ -169,9 +160,13 @@ function FarmerPage() {
               className="ml-2 rounded-lg border border-input bg-card px-3 py-1.5 font-mono text-sm text-foreground"
             />
           </label>
-          {smsLive && (
+          {smsLive ? (
             <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 text-[11px] text-success">
-              SMS inbox live
+              SMS inbox live · simulator
+            </span>
+          ) : (
+            <span className="rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-[11px] text-warning-foreground">
+              Backend offline
             </span>
           )}
         </div>
@@ -287,65 +282,51 @@ function FarmerPage() {
           <section className="rounded-2xl border border-border bg-card p-6 shadow-card">
             <div className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-primary" />
-              <h2 className="font-display text-lg font-semibold text-foreground">KaLI Agent (Featherless)</h2>
+              <h2 className="font-display text-lg font-semibold text-foreground">KaLI Voice Agent</h2>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Same explainability engine as USSD — localized, ≤160 characters, action-oriented. English, Kiswahili, or Luganda.
+              Speak — don&apos;t type. Same Featherless explainability as USSD; every reply is saved as an SMS in your
+              inbox (≤160 chars, localized).
             </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {languages.map((l) => (
-                <button
-                  key={l.code}
-                  type="button"
-                  onClick={() => setAgentLang(l.code)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
-                    agentLang === l.code ? "bg-primary text-primary-foreground" : "border border-border bg-background"
-                  }`}
-                >
-                  {l.label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-4 flex gap-2">
-              <input
-                value={agentInput}
-                onChange={(e) => setAgentInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && askAgent()}
-                placeholder="Ask in Swahili, Luganda, or English…"
-                className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              />
-              <button
-                type="button"
-                onClick={askAgent}
-                disabled={agentLoading}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-              >
-                {agentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ask"}
-              </button>
-            </div>
-            {agentReply && (
-              <div className="mt-4 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3 text-sm">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Farmer-facing reply · {agentReply.length} chars</p>
-                <p className="mt-1 text-foreground">{agentReply}</p>
-              </div>
-            )}
+            <FarmerSimulatorVoice
+              phoneNumber={phoneNumber}
+              lang={agentLang}
+              languages={languages}
+              onLangChange={setAgentLang}
+              onSmsDelivered={boostSmsPoll}
+            />
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-6 shadow-card">
-            <div className="flex items-baseline justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-display text-lg font-semibold text-foreground">SMS Inbox</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Decision relays from Neo4j <code className="text-xs">NOTIFIED</code> edges — polls every 8s.
+                  Real messages from Neo4j <code className="text-xs">NOTIFIED</code> edges — USSD, voice, and officer
+                  decisions. Africa&apos;s Talking optional; simulator writes to graph instantly.
                 </p>
               </div>
-              <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 text-[11px] text-success">
-                {smsList.length} message{smsList.length === 1 ? "" : "s"}
-              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={refreshSms}
+                  disabled={smsRefreshing}
+                  className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                  aria-label="Refresh SMS inbox"
+                >
+                  <RefreshCw className={`h-4 w-4 ${smsRefreshing ? "animate-spin" : ""}`} />
+                </button>
+                <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 text-[11px] text-success">
+                  {smsList.length} message{smsList.length === 1 ? "" : "s"}
+                </span>
+              </div>
             </div>
             <ul className="mt-4 space-y-3">
               {smsList.length === 0 && (
-                <li className="text-sm text-muted-foreground">No messages yet for {phoneNumber}.</li>
+                <li className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                  No messages yet for {phoneNumber}. Try USSD menu <span className="font-mono">2*4</span> (explain score)
+                  or speak with Kali above.
+                </li>
               )}
               {smsList.map((sms) => (
                 <li key={sms.id} className="rounded-lg border border-border bg-background p-3">

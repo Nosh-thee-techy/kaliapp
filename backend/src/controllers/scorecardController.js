@@ -5,6 +5,7 @@ import {
   listFarmers,
   recordDecision,
   recordSmsSent,
+  recordSmsByPhone,
   listPipelineRuns,
   listAuditLog,
   listSmsMessages,
@@ -12,6 +13,7 @@ import {
   getPublicStats as fetchPublicStats,
   findUniqueFarmers,
 } from "../services/farmerService.js";
+import { sendSms, isAfricasTalkingEnabled } from "../services/africasTalking.js";
 import { syncClimatePipeline } from "../services/climatePipeline.js";
 import { generateCreditNarrative, isFeatherlessEnabled } from "../services/featherlessService.js";
 import { createMasumiPaymentIntent, isMasumiEnabled } from "../services/masumiService.js";
@@ -112,9 +114,54 @@ export async function postSmsToFarmer(req, res) {
     if (!sms) {
       return res.status(404).json({ error: "Farmer not found" });
     }
-    return res.json({ ok: true, sms });
+    try {
+      await sendSms({ to: sms.to, message: sms.body });
+    } catch (err) {
+      console.warn("[sms] delivery failed (graph node saved):", err.message);
+    }
+    return res.json({ ok: true, sms, delivered: isAfricasTalkingEnabled() });
   } catch (error) {
     console.error("[sms]", error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+/** Public simulator — record + stub-deliver SMS by farmer phone (no Africa's Talking required). */
+export async function postSimulateSms(req, res) {
+  try {
+    const { phone, body, category } = req.body;
+    if (!phone?.trim()) {
+      return res.status(400).json({ error: "phone is required" });
+    }
+    if (!body?.trim()) {
+      return res.status(400).json({ error: "SMS body is required" });
+    }
+    const sms = await recordSmsByPhone(phone.trim(), {
+      body: body.trim(),
+      category: category || "explainability",
+    });
+    if (!sms) {
+      return res.status(404).json({ error: "No farmer registered for this phone number" });
+    }
+    try {
+      await sendSms({ to: sms.to, message: sms.body });
+    } catch (err) {
+      console.warn("[sms/simulate] delivery failed (graph node saved):", err.message);
+    }
+    return res.json({
+      ok: true,
+      sms: {
+        id: sms.id,
+        to: sms.to,
+        body: sms.body,
+        category: sms.category || category || "explainability",
+        sentIso: sms.sent_iso,
+      },
+      delivered: isAfricasTalkingEnabled(),
+      mode: isAfricasTalkingEnabled() ? "live" : "simulator",
+    });
+  } catch (error) {
+    console.error("[sms/simulate]", error);
     return res.status(500).json({ error: error.message });
   }
 }

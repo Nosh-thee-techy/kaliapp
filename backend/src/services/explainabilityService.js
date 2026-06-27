@@ -59,7 +59,7 @@ export async function buildScoringContext(lookup) {
 
 /**
  * Dual-output explainability router (eSusFarm pattern).
- * - farmer: ≤160 char SMS, localized, action-oriented, privacy-safe
+ * - farmer: ≤160 char SMS, localized, explains WHY (not action checklist), privacy-safe
  * - officer: full narrative for MIS / scorecard audit
  */
 export async function routeExplainability(lookup, lang = "en", options = {}) {

@@ -1,16 +1,16 @@
 import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { farmers, SEGMENT_META, STATUS_META } from "@/lib/mock-data";
+import { farmers, SEGMENT_META, STATUS_META, type Farmer } from "@/lib/mock-data";
 import { fetchGraphScorecard, postGraphDecision, fetchExplainability, postMasumiDisburse, postFieldVerification } from "@/lib/api-core";
 import type { GraphScorecard, ExplainabilityResult } from "@/lib/api-core";
 import { getOfficer } from "@/lib/officer-session";
 import { toast } from "sonner";
-import { requireOfficerSession } from "@/lib/require-officer";
+import { requireBranchOfficerSession } from "@/lib/require-officer";
 import { SadnessErrorPage } from "@/components/SadnessErrorPage";
 import { ExternalLink, Loader2, Brain, Wallet, CheckCircle2, MessageSquare, Cpu, MapPin } from "lucide-react";
 
 export const Route = createFileRoute("/scorecard/$id")({
-  beforeLoad: requireOfficerSession,
+  beforeLoad: requireBranchOfficerSession,
   head: ({ params }) => ({
     meta: [
       { title: `Scorecard ${params.id} — KaLI` },
@@ -43,8 +43,12 @@ export const Route = createFileRoute("/scorecard/$id")({
   ),
 });
 
+type ScorecardLoaderData =
+  | { source: "graph"; graph: GraphScorecard }
+  | { source: "mock"; farmer: Farmer };
+
 function ScorecardPage() {
-  const data = Route.useLoaderData();
+  const data = Route.useLoaderData() as ScorecardLoaderData;
   const navigate = useNavigate();
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState<null | string>(null);
