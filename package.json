@@ -9,7 +9,7 @@
     "neo4j:up": "docker compose -f docker-compose.neo4j.yml up -d",
     "neo4j:seed": "cd backend && npm run seed",
     "climate:sync": "cd backend && npm run sync:climate",
-    "build": "vite build --config frontend/vite.config.ts",
+    "build": "vite build --config frontend/vite.config.ts && node scripts/prepare-vercel-output.mjs",
     "build:dev": "vite build --config frontend/vite.config.ts --mode development",
     "preview": "vite preview --config frontend/vite.config.ts",
     "lint": "eslint .",
