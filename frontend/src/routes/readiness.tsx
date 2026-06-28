@@ -17,9 +17,9 @@ import {
   TrendingUp,
 } from "lucide-react";
 import farmerImg from "@/assets/farmer.jpg";
-import { fetchFarmerReadiness, completeReadinessAction, type FarmerReadiness } from "@/lib/api-core";
+import { fetchFarmerReadiness, completeReadinessAction, type FarmerReadiness, fetchAgentLanguages } from "@/lib/api-core";
 import { KaliVoice } from "@/components/KaliVoice";
-import { readinessCopy, whySectionTitle, type KaliVoiceLang } from "@/lib/kali-voice";
+import { readinessCopy, whySectionTitle, DEFAULT_FARMER_LANGS, normalizeFarmerLang, type KaliVoiceLang } from "@/lib/kali-voice";
 
 export const Route = createFileRoute("/readiness")({
   head: () => ({
@@ -31,18 +31,13 @@ export const Route = createFileRoute("/readiness")({
   component: ReadinessPage,
 });
 
-const LANGS = [
-  { code: "en", label: "English", flag: "🇬🇧" },
-  { code: "sw", label: "Kiswahili", flag: "🇰🇪" },
-  { code: "lg", label: "Luganda", flag: "🇺🇬" },
-] as const;
-
 function ReadinessPage() {
   const [lookup, setLookup] = useState(() =>
     typeof window !== "undefined" ? sessionStorage.getItem("kali.readiness.lookup") || "" : "",
   );
   const [input, setInput] = useState(lookup);
   const [lang, setLang] = useState<KaliVoiceLang>("en");
+  const [langOptions, setLangOptions] = useState(DEFAULT_FARMER_LANGS);
   const [data, setData] = useState<FarmerReadiness | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +46,22 @@ function ReadinessPage() {
   const actionsRef = useRef<HTMLElement>(null);
 
   const copy = readinessCopy(lang);
+
+  useEffect(() => {
+    fetchAgentLanguages()
+      .then((r) => {
+        if (r.languages?.length) {
+          setLangOptions(
+            r.languages.map((l) => ({
+              code: normalizeFarmerLang(l.code),
+              label: l.label,
+              flag: l.flag || "🌍",
+            })),
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(
     (id: string) => {
@@ -159,7 +170,7 @@ function ReadinessPage() {
         )}
 
         <div
-          className={`rounded-3xl border border-white/10 bg-white/5 p-5 shadow-elevated backdrop-blur-md ${data ? "mt-5" : "mt-8"}`}
+          className={`overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-5 shadow-elevated backdrop-blur-md ${data ? "mt-5" : "mt-8"}`}
         >
           {!data && (
             <form onSubmit={handleSubmit}>
@@ -191,20 +202,20 @@ function ReadinessPage() {
             </p>
           )}
 
-          <div className={`flex gap-2 ${data ? "mt-3" : "mt-4"}`}>
-            {LANGS.map((l) => (
+          <div className={`flex flex-wrap justify-center gap-2 ${data ? "mt-3" : "mt-4"}`}>
+            {langOptions.map((l) => (
               <button
                 key={l.code}
                 type="button"
                 onClick={() => setLang(l.code)}
-                className={`flex flex-1 items-center justify-center gap-1 rounded-xl py-2 text-xs font-medium transition-all ${
+                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-medium transition-all ${
                   lang === l.code
                     ? "bg-accent text-charcoal shadow-sm"
                     : "bg-white/5 text-white/55 hover:bg-white/10"
                 }`}
               >
-                <span>{l.flag}</span>
-                {l.label}
+                <span aria-hidden>{l.flag}</span>
+                <span>{l.label}</span>
               </button>
             ))}
           </div>

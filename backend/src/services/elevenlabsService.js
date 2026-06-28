@@ -1,4 +1,4 @@
-import { normalizeLang, SUPPORTED_LANGS } from "../config/languages.js";
+import { normalizeLang, SUPPORTED_LANGS, getElevenLabsSttCode } from "../config/languages.js";
 
 const ELEVENLABS_API_KEY = (process.env.ELEVENLABS_API_KEY || "").trim();
 const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2";
@@ -20,8 +20,7 @@ export function getVoiceId(lang) {
 }
 
 export function getSttLanguageCode(lang) {
-  const code = normalizeLang(lang);
-  return SUPPORTED_LANGS[code]?.elevenLabsStt || "eng";
+  return getElevenLabsSttCode(lang);
 }
 
 export function getVoiceConfig() {

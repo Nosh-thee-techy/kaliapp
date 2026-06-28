@@ -18,6 +18,7 @@ import { syncClimatePipeline } from "../services/climatePipeline.js";
 import { generateCreditNarrative, isFeatherlessEnabled } from "../services/featherlessService.js";
 import { createMasumiPaymentIntent, isMasumiEnabled } from "../services/masumiService.js";
 import { mlApproveProbability, blendedGraphMlScore, isMlEnabled } from "../services/mlScoringService.js";
+import { USSD_SHORTCODE, USSD_SESSION_TTL_SEC } from "../config/ussd.js";
 
 export async function getScorecard(req, res) {
   try {
@@ -257,6 +258,12 @@ export async function healthCheck(_req, res) {
         masumi: isMasumiEnabled(),
         neo4j: true,
         africas_talking: Boolean(process.env.AT_API_KEY),
+      },
+      ussd: {
+        shortcode: USSD_SHORTCODE,
+        sessionTtlSec: USSD_SESSION_TTL_SEC,
+        sessionStore: process.env.REDIS_URL?.trim() ? "redis" : "memory",
+        fsm: true,
       },
     });
   } catch (error) {

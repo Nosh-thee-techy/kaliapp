@@ -3,22 +3,39 @@ import { useCallback, useEffect, useState } from "react";
 import { formatRelative } from "@/lib/mock-data";
 import { fetchSmsMessages, postUssdSession, fetchAgentLanguages } from "@/lib/api-core";
 import type { AgentLanguage, SmsMessage } from "@/lib/api-core";
-import { Bot, RefreshCw } from "lucide-react";
+import { Phone, RefreshCw } from "lucide-react";
+import { FeaturePhoneCallSim } from "@/components/FeaturePhoneCallSim";
 import { FarmerSimulatorVoice } from "@/components/FarmerSimulatorVoice";
-import type { KaliVoiceLang } from "@/lib/kali-voice";
+import { DEFAULT_FARMER_LANGS, type KaliVoiceLang } from "@/lib/kali-voice";
 
 export const Route = createFileRoute("/farmer")({
   head: () => ({
     meta: [
       { title: "Farmer Phone Simulator — KaLI" },
-      { name: "description", content: "USSD session and SMS inbox simulator for the farmer-side experience." },
+      { name: "description", content: "USSD, voice call, and SMS inbox simulator for the farmer-side experience." },
     ],
   }),
   component: FarmerPage,
 });
 
-const SHORTCODE = "*483*100#";
+const SHORTCODE = "*384*11400#";
+const KALI_VOICE_LINE = "08003841140";
 const DEFAULT_PHONE = "+254712345678";
+
+type PhoneMode = "dialer" | "ussd" | "call";
+
+function normalizeDial(raw: string): string {
+  return raw.replace(/\s/g, "").replace(/^\+254/, "0");
+}
+
+function isUssdDial(raw: string): boolean {
+  return normalizeDial(raw) === SHORTCODE.replace(/\s/g, "");
+}
+
+function isVoiceDial(raw: string): boolean {
+  const d = normalizeDial(raw);
+  return d === KALI_VOICE_LINE || d === "803841140" || d === "0803841140";
+}
 
 function FarmerPage() {
   const [phoneNumber, setPhoneNumber] = useState(DEFAULT_PHONE);
@@ -27,7 +44,7 @@ function FarmerPage() {
   const [input, setInput] = useState("");
   const [dial, setDial] = useState("");
   const [display, setDisplay] = useState(
-    "Welcome.\nDial KaLI shortcode\n*483*100#\nthen press Send.",
+    `Welcome.\nDial USSD ${SHORTCODE}\nor voice ${KALI_VOICE_LINE.slice(0, 4)} ${KALI_VOICE_LINE.slice(4, 7)} ${KALI_VOICE_LINE.slice(7)}\nthen press Send.`,
   );
   const [loading, setLoading] = useState(false);
   const [sessionEnded, setSessionEnded] = useState(false);
@@ -35,15 +52,16 @@ function FarmerPage() {
   const [smsLive, setSmsLive] = useState(false);
   const [smsRefreshing, setSmsRefreshing] = useState(false);
   const [agentLang, setAgentLang] = useState<KaliVoiceLang>("sw");
-  const [languages, setLanguages] = useState<AgentLanguage[]>([
-    { code: "en", label: "English" },
-    { code: "sw", label: "Kiswahili" },
-    { code: "lg", label: "Luganda" },
-  ]);
+  const [phoneMode, setPhoneMode] = useState<PhoneMode>("dialer");
+  const [languages, setLanguages] = useState<AgentLanguage[]>(
+    DEFAULT_FARMER_LANGS.map(({ code, label, flag }) => ({ code, label, flag })),
+  );
 
   useEffect(() => {
     fetchAgentLanguages()
-      .then((r) => setLanguages(r.languages))
+      .then((r) => {
+        if (r.languages?.length) setLanguages(r.languages);
+      })
       .catch(() => {});
   }, []);
 
@@ -91,11 +109,19 @@ function FarmerPage() {
   }
 
   async function send() {
+    if (phoneMode === "call") return;
+
     if (!dialed) {
-      if (dial.replace(/\s/g, "") !== SHORTCODE) {
-        setDisplay("Invalid shortcode.\nTry *483*100#");
+      if (isVoiceDial(dial)) {
+        setPhoneMode("call");
+        setDial("");
         return;
       }
+      if (!isUssdDial(dial)) {
+        setDisplay(`Invalid number.\nUSSD: ${SHORTCODE}\nVoice: ${KALI_VOICE_LINE}`);
+        return;
+      }
+      setPhoneMode("ussd");
       setDialed(true);
       setInput("");
       await runUssd(undefined);
@@ -116,12 +142,34 @@ function FarmerPage() {
   }
 
   function reset() {
+    setPhoneMode("dialer");
     setDialed(false);
     setSessionText("");
     setSessionEnded(false);
     setDial("");
     setInput("");
-    setDisplay("Welcome.\nDial KaLI shortcode\n*483*100#\nthen press Send.");
+    setDisplay(
+      `Welcome.\nDial USSD ${SHORTCODE}\nor voice ${KALI_VOICE_LINE.slice(0, 4)} ${KALI_VOICE_LINE.slice(4, 7)} ${KALI_VOICE_LINE.slice(7)}\nthen press Send.`,
+    );
+  }
+
+  function endCall() {
+    setPhoneMode("dialer");
+    setDial("");
+    setDisplay("Call ended.\nThank you for calling KaLI.");
+    boostSmsPoll();
+  }
+
+  function quickDialVoice() {
+    setPhoneMode("call");
+    setDial("");
+    setDialed(false);
+    setSessionText("");
+    setSessionEnded(false);
+  }
+
+  function quickDialUssd() {
+    setDial(SHORTCODE);
   }
 
   const keypad = [
@@ -132,11 +180,13 @@ function FarmerPage() {
   ];
 
   function press(k: string) {
+    if (phoneMode === "call") return;
     if (!dialed) setDial((d) => d + k);
     else if (!sessionEnded) setInput((v) => v + k);
   }
 
   function backspace() {
+    if (phoneMode === "call") return;
     if (!dialed) setDial((d) => d.slice(0, -1));
     else setInput((v) => v.slice(0, -1));
   }
@@ -147,9 +197,9 @@ function FarmerPage() {
         <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Field Channel · Zero-bandwidth</p>
         <h1 className="mt-1 font-display text-3xl font-semibold text-foreground sm:text-4xl">Farmer Phone Simulator</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Point-to-point USSD and SMS — no Africa&apos;s Talking keys required. Dial{" "}
-          <span className="font-mono text-foreground">{SHORTCODE}</span>, speak with Kali, and watch real graph-backed
-          messages land in the inbox below.
+          Point-to-point USSD, voice call, and SMS — no Africa&apos;s Talking keys required. Dial{" "}
+          <span className="font-mono text-foreground">{SHORTCODE}</span> for USSD or{" "}
+          <span className="font-mono text-foreground">{KALI_VOICE_LINE}</span> to call Kali on the feature phone.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <label className="text-xs font-medium text-muted-foreground">
@@ -160,6 +210,21 @@ function FarmerPage() {
               className="ml-2 rounded-lg border border-input bg-card px-3 py-1.5 font-mono text-sm text-foreground"
             />
           </label>
+          <button
+            type="button"
+            onClick={quickDialUssd}
+            className="rounded-full border border-border bg-card px-3 py-1 text-[11px] font-medium text-foreground hover:bg-muted"
+          >
+            USSD shortcut
+          </button>
+          <button
+            type="button"
+            onClick={quickDialVoice}
+            className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+          >
+            <Phone className="h-3 w-3" />
+            Call Kali
+          </button>
           {smsLive ? (
             <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 text-[11px] text-success">
               SMS inbox live · simulator
@@ -178,33 +243,42 @@ function FarmerPage() {
             <div className="rounded-[2rem] bg-zinc-900 p-3">
               <div className="mb-3 flex items-center justify-between px-2 text-[10px] text-zinc-400">
                 <span>Safaricom</span>
-                <span>📶 ▮▮▮▯</span>
+                <span>{phoneMode === "call" ? "📞 Voice" : "📶 ▮▮▮▯"}</span>
                 <span>{loading ? "…" : "78%"}</span>
               </div>
+              {phoneMode === "call" ? (
+                <FeaturePhoneCallSim
+                  phoneNumber={phoneNumber}
+                  lang={agentLang}
+                  onEndCall={endCall}
+                  onSmsDelivered={boostSmsPoll}
+                />
+              ) : (
+                <>
               <div className="min-h-[260px] rounded-md bg-[oklch(0.85_0.08_135)] p-4 font-mono text-[13px] leading-snug text-zinc-900 shadow-inner">
-                {!dialed ? (
-                  <>
-                    <div className="whitespace-pre-line">{display}</div>
-                    <div className="mt-3 border-t border-zinc-900/30 pt-2">
-                      <span className="text-[10px] uppercase tracking-wider opacity-70">Dialer</span>
-                      <div className="mt-0.5 break-all text-base font-semibold">
-                        {dial || <span className="opacity-50">_</span>}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="whitespace-pre-line">{display}</div>
-                    {!sessionEnded && (
-                      <div className="mt-3 border-t border-zinc-900/30 pt-2">
-                        <span className="text-[10px] uppercase tracking-wider opacity-70">Reply</span>
-                        <div className="mt-0.5 break-all text-base font-semibold">
-                          {input || <span className="opacity-50">_</span>}
+                    {!dialed ? (
+                      <>
+                        <div className="whitespace-pre-line">{display}</div>
+                        <div className="mt-3 border-t border-zinc-900/30 pt-2">
+                          <span className="text-[10px] uppercase tracking-wider opacity-70">Dialer</span>
+                          <div className="mt-0.5 break-all text-base font-semibold">
+                            {dial || <span className="opacity-50">_</span>}
+                          </div>
                         </div>
-                      </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="whitespace-pre-line">{display}</div>
+                        {!sessionEnded && (
+                          <div className="mt-3 border-t border-zinc-900/30 pt-2">
+                            <span className="text-[10px] uppercase tracking-wider opacity-70">Reply</span>
+                            <div className="mt-0.5 break-all text-base font-semibold">
+                              {input || <span className="opacity-50">_</span>}
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
               </div>
 
               <div className="mt-4 space-y-2">
@@ -248,10 +322,18 @@ function FarmerPage() {
                   </button>
                 </div>
               </div>
+                </>
+              )}
             </div>
           </div>
           <p className="mt-3 text-center text-xs text-muted-foreground">
-            Session text: <span className="font-mono">{sessionText || "(new)"}</span>
+            {phoneMode === "call" ? (
+              <>Voice call · {KALI_VOICE_LINE} · Africa&apos;s Talking pending</>
+            ) : (
+              <>
+                Session: <span className="font-mono">{sessionText || "(new)"}</span>
+              </>
+            )}
           </p>
         </div>
 
@@ -266,7 +348,8 @@ function FarmerPage() {
                 { code: "1", label: "Register / Request Credit", desc: "Writes Farmer node + coop link in Neo4j" },
                 { code: "2", label: "Check Loan Status", desc: "Featherless ≤160 char explainer in your language" },
                 { code: "3", label: "Climate Advisory", desc: "Zone advisory via Cooperative → ClimateZone path" },
-                { code: "4", label: "Explain My Score", desc: "Privacy-safe action step — no ML jargon on screen" },
+                { code: "4", label: "Explain My Score", desc: "Plain-language why — same as voice menu 4" },
+                { code: "☎", label: "Voice helpline", desc: `Dial ${KALI_VOICE_LINE} on the phone — speak with Kali` },
               ].map((m) => (
                 <div key={m.code} className="rounded-lg border border-border bg-background p-3">
                   <div className="flex items-baseline gap-2">
@@ -281,12 +364,13 @@ function FarmerPage() {
 
           <section className="rounded-2xl border border-border bg-card p-6 shadow-card">
             <div className="flex items-center gap-2">
-              <Bot className="h-5 w-5 text-primary" />
-              <h2 className="font-display text-lg font-semibold text-foreground">KaLI Voice Agent</h2>
+              <Phone className="h-5 w-5 text-emerald-600" />
+              <h2 className="font-display text-lg font-semibold text-foreground">Voice Call IVR</h2>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Speak — don&apos;t type. Same Featherless explainability as USSD; every reply is saved as an SMS in your
-              inbox (≤160 chars, localized).
+              Simulates Africa&apos;s Talking inbound call to <span className="font-mono">{KALI_VOICE_LINE}</span>.
+              Ring → connect → IVR menu (1–4) or speak freely. Kali replies with ElevenLabs voice; SMS summary hits
+              the inbox.
             </p>
             <FarmerSimulatorVoice
               phoneNumber={phoneNumber}

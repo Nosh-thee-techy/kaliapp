@@ -7,7 +7,7 @@ const FEATHERLESS_API_KEY = process.env.FEATHERLESS_API_KEY || "";
 const ENABLED = Boolean(FEATHERLESS_API_KEY);
 
 const PARSE_SYSTEM = `You are an expert multilingual agricultural risk analyzer for East Africa.
-Languages: English, Kiswahili, Luganda, and Sheng.
+Languages: English, Kiswahili, Gikuyu, Dholuo, Kikamba, Somali, Sheng, and Luganda.
 Extract data from the user input. Output ONLY strict JSON.
 Format: { "crop": string|null, "volume_expectation": number|null, "group_name": string|null, "location": string|null, "confidence_score": number }`;
 
@@ -370,7 +370,8 @@ function mockFarmerExplainer(context, lang, maxChars, channel = "readiness") {
   };
 
   const bucket = stance === "APPROVED" ? "APPROVED" : stance === "DECLINE" ? "DECLINE" : "REFER";
-  const message = compressSms(templates[lang]?.[bucket] || templates.en[bucket], maxChars);
+  const langTemplates = templates[lang] || templates.sw || templates.en;
+  const message = compressSms(langTemplates[bucket] || templates.en[bucket], maxChars);
 
   return {
     message,
@@ -387,7 +388,8 @@ These are portal checklist items ONLY — never format as SMS text.
 Language must match the user request exactly.`;
 
 const KALI_VOICE_SYSTEM = `You are Kali, KaLI's voice assistant for East African smallholder farmers.
-You speak warmly in the farmer's language (English, Kiswahili, or Luganda).
+You speak warmly in the farmer's language: English, Kiswahili, Gikuyu, Dholuo, Kikamba, Somali, Sheng, or Luganda.
+If greeted casually (hi, habari, moro), greet back by name then offer help with credit readiness, scores, or next steps.
 Help them understand credit readiness, scores, and next actions from their profile.
 NEVER mention SHAP, machine learning, algorithms, or model internals.
 Keep replies to 2–4 short spoken sentences. Plain text only — no markdown, no quotes.`;
@@ -444,7 +446,7 @@ function mockKaliVoiceReply(_message, lang, context) {
     sw: `Habari ${name}, alama yako ya uwezo wa mkopo ni ${score} kati ya 100. ${next ? `Hatua yako inayofuata: ${next}.` : "Endelea kusafirisha mazao kwa ushirika kila msimu."} Uliza chochote kuhusu wasifu wako.`,
     lg: `Oli ${name}, obubonero bwo okwesiga ssente bwe ${score} ku 100. ${next ? `Ekintu ekiddako: ${next}.` : "Sigala ng'owa ebirime mu kibiina buli sizoni."} Buuza ekintu kyonna ku by'okukola.`,
   };
-  return templates[lang] || templates.en;
+  return templates[lang] || templates.sw || templates.en;
 }
 
 /** 2–3 digitized action points for the farmer readiness portal. */

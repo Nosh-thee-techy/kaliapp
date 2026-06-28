@@ -1,201 +1,31 @@
-import { calculateGraphScore } from "../services/scoringEngine.js";
-import { findFarmerByPhone, recordSmsSent } from "../services/farmerService.js";
+import { findFarmerByPhone } from "../services/farmerService.js";
 import { parseAfricasTalkingUssd } from "../services/africasTalking.js";
+import { runUssdFsm } from "../services/ussdFsm.js";
 import { handleLoanApplicationWorkflow } from "../services/underwriterAgent.js";
-import { routeExplainability } from "../services/explainabilityService.js";
-import { USSD_LANG_MENU, langFromUssdStep, normalizeLang } from "../config/languages.js";
-
-const sessionLang = new Map();
-
-function getLang(sessionId, steps) {
-  if (steps?.[0]) return langFromUssdStep(steps[0]);
-  return sessionLang.get(sessionId) || "sw";
-}
-
-function setLang(sessionId, lang) {
-  if (sessionId) sessionLang.set(sessionId, normalizeLang(lang));
-}
-
-function triggerIngestWorkflow(payload) {
-  handleLoanApplicationWorkflow(payload).catch((err) => {
-    console.error("[ussd→ingest]", err);
-  });
-}
-
-function formatUssdExplainer(lookup, lang) {
-  return routeExplainability(lookup, lang, { channel: "ussd", skipOfficer: true });
-}
-
-async function deliverUssdSms(lookup, smsBody, category = "explainability") {
-  if (!lookup || !smsBody) return;
-  try {
-    await recordSmsSent(lookup, { body: smsBody, category });
-  } catch (err) {
-    console.warn("[ussd→sms]", err.message);
-  }
-}
 
 export async function handleUssd(req, res) {
   const parsed = parseAfricasTalkingUssd(req);
   let text = parsed.text;
   if (text === "") text = undefined;
+
   const phoneNumber = parsed.phoneNumber || req.body?.phoneNumber || "";
   const sessionId = parsed.sessionId || phoneNumber || "local";
-  const steps = text ? text.split("*").filter(Boolean) : [];
-  let response = "";
 
   try {
-    const known = phoneNumber ? await findFarmerByPhone(phoneNumber) : null;
-
-    if (!text) {
-      response = USSD_LANG_MENU;
-    } else if (steps.length === 1) {
-      setLang(sessionId, langFromUssdStep(steps[0]));
-      const L = getLang(sessionId, steps);
-      if (known) {
-        response =
-          L === "lg"
-            ? "CON KaLI Core Engine\n" +
-              `Nkulamusizza, ${known.name?.split(" ")[0] || "omulimi"}.\n` +
-              "1. Saba Ebbanja\n" +
-              "2. Kebera Embeera\n" +
-              "3. Obubaka bw'Obudde\n" +
-              "4. Nnannyonnyola Obubonero\n" +
-              "0. Fuluma"
-            : L === "sw"
-              ? "CON KaLI Core Engine\n" +
-                `Karibu, ${known.name?.split(" ")[0] || "mkulima"}.\n` +
-                "1. Omba Mkopo wa Pembejeo\n" +
-                "2. Angalia Hali ya Mkopo\n" +
-                "3. Ushauri wa Hali ya Hewa\n" +
-                "4. Eleza Alama Yangu\n" +
-                "0. Toka"
-              : "CON KaLI Core Engine\n" +
-                `Welcome, ${known.name?.split(" ")[0] || "farmer"}.\n` +
-                "1. Request Input Credit\n" +
-                "2. Check Loan Status\n" +
-                "3. Climate Advisory\n" +
-                "4. Explain My Score\n" +
-                "0. Exit";
-      } else {
-        response =
-          L === "sw"
-            ? "CON KaLI Core Engine\nKaribu.\n1. Jisajili kupitia Ushirika\n2. Angalia Hali\n0. Toka"
-            : "CON KaLI Core Engine\nWelcome.\n1. Register via Cooperative\n2. Check Status\n0. Exit";
-      }
-    } else {
-      const lang = getLang(sessionId, steps);
-      const menu = steps[1];
-
-      if (menu === "0") {
-        response = lang === "sw" ? "END Asante. KaLI — Kilimo Loans." : "END Thank you. KaLI — Kilimo Loans.";
-      } else if (menu === "1" && known && steps.length === 3) {
-        response =
-          lang === "sw"
-            ? "CON Ingiza Msimbo wa Ushirika (mf. COOP-NVS-04):"
-            : "CON Enter Cooperative Code (e.g. COOP-NVS-04):";
-      } else if (menu === "1" && known && steps.length === 4) {
-        response =
-          lang === "sw"
-            ? "CON Ingiza Ekari na Mazao (mf. 2*Mahindi):"
-            : "CON Enter Acreage & Crop (e.g. 2*Maize):";
-      } else if (menu === "1" && known && steps.length >= 5) {
-        const coopCode = steps[2];
-        const acreageCrop = steps[3].split("*");
-        triggerIngestWorkflow({
-          channel: "ussd",
-          phone: phoneNumber,
-          lang,
-          nationalId: known.national_id,
-          coopCode,
-          acreage: Number(acreageCrop[0]) || 1,
-          cropType: acreageCrop[1] || "Maize",
-          text: `${acreageCrop[1] || "Maize"} ekari ${acreageCrop[0]} ${coopCode}`,
-        });
-        response =
-          lang === "sw"
-            ? "END Takwimu zinakusanywa.\nUtapokea SMS hivi punde."
-            : "END Metrics compiling.\nYou will receive an SMS breakdown shortly.";
-      } else if (menu === "1" && !known && steps.length === 3) {
-        response =
-          lang === "sw" ? "CON Ingiza Nambari ya Kitambulisho:" : "CON Enter your National ID:";
-      } else if (menu === "1" && !known && steps.length === 4) {
-        response =
-          lang === "sw"
-            ? "CON Ingiza Msimbo wa Ushirika:"
-            : "CON Enter Cooperative Code:";
-      } else if (menu === "1" && !known && steps.length === 5) {
-        response =
-          lang === "sw"
-            ? "CON Ingiza Ekari na Mazao (mf. 2*Mahindi):"
-            : "CON Enter Acreage & Crop (e.g. 2*Maize):";
-      } else if (menu === "1" && !known && steps.length >= 6) {
-        const nationalId = steps[2];
-        const coopCode = steps[3];
-        const acreageCrop = steps[4].split("*");
-        triggerIngestWorkflow({
-          channel: "ussd",
-          phone: phoneNumber,
-          lang,
-          nationalId,
-          coopCode,
-          acreage: Number(acreageCrop[0]) || 1,
-          cropType: acreageCrop[1] || "Maize",
-          text: `${acreageCrop[1] || "Maize"} ekari ${acreageCrop[0]} ${coopCode}`,
-        });
-        response =
-          lang === "sw"
-            ? "END Takwimu zinakusanywa.\nUtapokea SMS hivi punde."
-            : "END Metrics compiling.\nYou will receive an SMS breakdown shortly.";
-      } else if (menu === "2" && known && steps.length === 2) {
-        const result = await formatUssdExplainer(known.id || known.national_id, lang);
-        if (!result?.ok) {
-          response = lang === "lg" ? "END Tewali kukubisa." : lang === "sw" ? "END Hakuna ombi." : "END No application found.";
-        } else {
-          await deliverUssdSms(known.id || known.national_id, result.farmer.sms);
-          response = `END ${result.farmer.sms}`;
-        }
-      } else if (menu === "4" && known && steps.length === 2) {
-        const result = await formatUssdExplainer(known.id || known.national_id, lang);
-        if (!result?.ok) {
-          response = lang === "lg" ? "END Tewali kukubisa." : lang === "sw" ? "END Hakuna rekodi." : "END No record found.";
-        } else {
-          await deliverUssdSms(known.id || known.national_id, result.farmer.sms);
-          response = `END ${result.farmer.sms}`;
-        }
-      } else if (menu === "2" && steps.length === 3) {
-        response =
-          lang === "sw" ? "CON Ingiza Kitambulisho:" : "CON Enter National ID:";
-      } else if (menu === "2" && steps.length >= 4) {
-        const result = await formatUssdExplainer(steps[3], lang);
-        if (!result?.ok) {
-          response = lang === "lg" ? "END Tewali kukubisa." : lang === "sw" ? "END Hakuna rekodi." : "END No matching registry.";
-        } else {
-          await deliverUssdSms(result.farmerId, result.farmer.sms);
-          response = `END ${result.farmer.sms}`;
-        }
-      } else if (menu === "3" && known && steps.length === 2) {
-        const result = await calculateGraphScore(known.id || known.national_id);
-        const adv = result?.climate?.advisory || (lang === "sw" ? "Hakuna ushauri." : "No advisories.");
-        response = `END ${adv}`;
-      } else if (menu === "3" && steps.length >= 3) {
-        const result = await calculateGraphScore(steps[3] || steps[2]);
-        const adv = result?.climate?.advisory || (lang === "sw" ? "Hakuna ushauri." : "No advisories.");
-        response = `END ${adv}`;
-      } else {
-        response =
-          lang === "sw"
-            ? "END Chaguo batili. Piga *483*100# kuanza upya."
-            : "END Invalid selection. Dial *483*100# to restart.";
-      }
-    }
+    const farmer = phoneNumber ? await findFarmerByPhone(phoneNumber) : null;
+    const response = await runUssdFsm({
+      sessionId,
+      phoneNumber,
+      text,
+      farmer,
+    });
+    res.set("Content-Type", "text/plain");
+    res.send(response);
   } catch (error) {
     console.error("[ussd]", error);
-    response = "END System temporarily unavailable. Try again later.";
+    res.set("Content-Type", "text/plain");
+    res.send("END System temporarily unavailable. Try again later.");
   }
-
-  res.set("Content-Type", "text/plain");
-  res.send(response);
 }
 
 export async function handleVoiceIngest(req, res) {

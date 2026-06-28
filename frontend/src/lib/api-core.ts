@@ -628,7 +628,7 @@ export async function fetchZoneWeather(zoneId: string): Promise<ZoneWeather> {
   return graphFetch(`/api/map/zones/${encodeURIComponent(zoneId)}/weather`);
 }
 
-export type AgentLanguage = { code: string; label: string };
+export type AgentLanguage = { code: string; label: string; flag?: string; region?: string };
 
 export type AgentChatResponse = {
   type: "parse" | "explain";

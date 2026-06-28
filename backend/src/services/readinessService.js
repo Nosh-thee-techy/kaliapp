@@ -2,7 +2,7 @@ import { buildScoringContext, routeExplainability } from "./explainabilityServic
 import { findFarmerByLookup } from "./farmerLookup.js";
 import { listSmsMessages } from "./farmerService.js";
 import { generateReadinessActions } from "./featherlessService.js";
-import { normalizeLang } from "../config/languages.js";
+import { normalizeLang, copyBucket } from "../config/languages.js";
 import {
   syncActionPlan,
   getMitigationBonus,
@@ -62,12 +62,12 @@ const MISSING_COPY = {
 };
 
 function localizeAction(dragLabel, lang) {
-  const bucket = ACTION_COPY[lang] || ACTION_COPY.en;
+  const bucket = copyBucket(lang, ACTION_COPY);
   return bucket[dragLabel] || bucket.default;
 }
 
 function buildMissingSignals(context, lang) {
-  const copy = MISSING_COPY[lang] || MISSING_COPY.en;
+  const copy = copyBucket(lang, MISSING_COPY);
   const missing = [];
 
   if ((context.cooperative_delivery_years ?? 0) < 2) {
@@ -100,7 +100,21 @@ function dragsToActions(drags, lang) {
 }
 
 function driversToStrengths(drivers, lang) {
-  const prefix = lang === "sw" ? "Imara" : lang === "lg" ? "Kikakamu" : "Strong";
+  const code = normalizeLang(lang);
+  const prefix =
+    code === "sw" || code === "sheng"
+      ? "Imara"
+      : code === "lg"
+        ? "Kikakamu"
+        : code === "ki"
+          ? "Nogu"
+          : code === "luo"
+            ? "Matek"
+            : code === "kam"
+              ? "Nzeo"
+              : code === "so"
+                ? "Adag"
+                : "Strong";
   return (drivers || []).slice(0, 2).map((d) => ({
     label: d.label,
     summary: `${prefix}: ${d.detail}`,
@@ -165,6 +179,17 @@ export async function getFarmerReadiness(rawLookup, lang = "en") {
         ? "building"
         : "almost";
 
+  const bandLabels = copyBucket(language, {
+    en: { ready: "Credit ready", almost: "Almost there", building: "Building trust" },
+    sw: { ready: "Uko tayari zaidi", almost: "Karibu tayari", building: "Jenga uaminifu" },
+    lg: { ready: "Olina obukakafu", almost: "Oli kumpi", building: "Zimba obwesige" },
+    ki: { ready: "Wîra wîra", almost: "Îgûrû", building: "Thondeka wîti" },
+    luo: { ready: "I yot mos", almost: "Pod nitie", building: "Chak geno" },
+    kam: { ready: "Wĩ tayari", almost: "Vakuvĩ", building: "Akĩa kĩĩsĩ" },
+    so: { ready: "Diyaar", almost: "Ku dhow", building: "Dhis confid" },
+    sheng: { ready: "Uko set", almost: "Karibu", building: "Jenga score" },
+  });
+
   return {
     ok: true,
     farmer: {
@@ -182,24 +207,7 @@ export async function getFarmerReadiness(rawLookup, lang = "en") {
       mitigationBonus: mitigation.bonusPoints,
       band,
       stance: context.stance,
-      label:
-        band === "ready"
-          ? language === "sw"
-            ? "Uko tayari zaidi"
-            : language === "lg"
-              ? "Olina obukakafu"
-              : "Credit ready"
-          : band === "almost"
-            ? language === "sw"
-              ? "Karibu tayari"
-              : language === "lg"
-                ? "Oli kumpi"
-                : "Almost there"
-            : language === "sw"
-              ? "Jenga uaminifu"
-              : language === "lg"
-                ? "Zimba obwesige"
-                : "Building trust",
+      label: bandLabels[band] || bandLabels.building,
     },
     whyMessage: explained.farmer?.sms || null,
     headline: explained.farmer?.sms || null,
