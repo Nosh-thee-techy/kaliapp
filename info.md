@@ -7,6 +7,8 @@
 
 Pitch day: **Sunday June 28** in Nairobi. Under **5 minutes**.
 
+Prize pool: **340,000 KES+**
+
 ### Requirements
 - Integrate **4 partner technologies** into a single demo:
   1. **Neo4j** (graph database — deep integration mandatory)
@@ -19,8 +21,23 @@ Pitch day: **Sunday June 28** in Nairobi. Under **5 minutes**.
 - Audience: AFRACA member central banks, agri banks, MFIs
 - Must demo all 4 partner technologies live
 
+### Challenge Structure
+- Workshops from **May 15** onwards
+- Final sprint **27–28 June 2026** in Nairobi (in-person)
+- Challenge briefs curated by **Mercy Corps AgriFin** covering real problem areas in agriculture, agricultural finance, farmer support, advisory, market access, insurance, data infrastructure
+- Participants: Developers, designers, and product thinkers
+- IP stays with participants
+
+### Our Challenge Brief
+**Brief title:** "The Invisible Farmer: Graph AI Credit Scoring at Africa's Last Mile"
+
+**Organization:** African Rural and Agricultural Credit Association (AFRACA)
+
+**Challenge type:** Financial inclusion
+
+**Focus area:** Credit risk profiling, alternative data, loan officer decision support, repayment confidence, agricultural lending
+
 ### Submission Info
-- 9 submissions total (across all tracks)
 - Deployed at: https://kali-lending.vercel.app
 - GitHub: https://github.com/Nosh-thee-techy/kaliapp
 
@@ -28,10 +45,36 @@ Pitch day: **Sunday June 28** in Nairobi. Under **5 minutes**.
 
 ## Problem Statement
 
-Traditional credit models exclude smallholder farmers — especially women, youth, and persons with disabilities (PWDs) — because they lack:
+### The Core Problem
+
+AFRACA's 86 member institutions across 30 African countries hold capital, but **less than 3% is directed to smallholder farmers** despite a **USD 240 billion annual financing gap**.
+
+Africa faces an annual **trade finance gap of up to $120 billion**, limiting capital for trade, production, inputs, and food security.
+
+The core problem is simple: **Agricultural finance fails because risk is hard to see, verify, and explain.**
+
+For farmers, this means exclusion from finance even when they are productive, reliable, or ready to grow — because they lack the documents, records, collateral, or digital history that formal systems require.
+
+For lenders and financial institutions, this means making decisions with incomplete information. A farmer may have useful signals such as mobile money activity, cooperative history, input purchases, repayment behavior, production records, or seasonal income patterns — but these signals are scattered and difficult to interpret.
+
+For insurers, the challenge is farm-level risk visibility. Broad area-level data does not reflect what is happening on an individual farm.
+
+### Who Gets Excluded — and Why
+
+Traditional credit models exclude smallholder farmers because they lack:
 - Formal banking history ("thin files")
 - Immovable collateral (land titles)
 - Smartphone apps or reliable internet
+
+**Women** produce a large share of sub-Saharan Africa's food, but formal credit systems depend on land titles or collateral structures that exclude them.
+
+**Youth** farmers are treated as risky because of age, even when they have useful repayment signals through peer groups, input purchases, or seasonal farming activity.
+
+**Persons with disabilities** are excluded because financial institutions have not collected the data needed to assess them fairly.
+
+### The Missing Layer
+
+The missing layer is **risk intelligence**: a way to connect alternative farmer data, climate and pest risk, cooperative networks, and repayment behavior into a credit score or risk profile that rural loan officers can use quickly and confidently.
 
 **KaLI's approach:** Replace traditional collateral with **network resilience signals** evaluated in a Neo4j graph database:
 - Cooperative delivery history (supply chain as collateral)
@@ -41,6 +84,34 @@ Traditional credit models exclude smallholder farmers — especially women, yout
 - Live climate risk data (drought, pest proximity)
 
 > Core principle: **Credit that reads the weather, not just the wallet.**
+
+### What Our Prototype Does
+
+Per the AFRACA challenge brief, our prototype helps a **rural loan officer assess smallholder creditworthiness using alternative and contextual data** by bringing together:
+- Mobile money flows
+- Cooperative repayment history
+- Pest outbreak proximity
+- Drought exposure
+- Peer lending circles
+- Cooperative network strength
+- Seasonal income patterns
+
+The user can understand:
+- What risk signals are available
+- What creditworthiness profile is being generated
+- Which factors improve or weaken the assessment
+- How the score supports a lending decision
+- Why the recommendation is fairer than relying only on collateral
+
+The risk profile is clear enough for a loan officer to act on quickly in a **rural branch setting** — even from a **basic phone**.
+
+### What We Avoided
+
+- ❌ Credit scoring that recreates traditional collateral-based exclusion — we use **graph topology as alternative collateral**
+- ❌ Risk profiles that cannot explain why — we show **drivers and drags** with plain-language explanations
+- ❌ Treating women, youth, and PWDs as one generic group — we have **segment-specific views** and chama participation as a women-inclusive signal
+- ❌ Ignoring climate, pest, cooperative, or seasonal context — we integrate **live Open-Meteo weather data** and **zone-level SPI/pest risk**
+- ❌ Building for high-resource settings only — our **USSD-first** design works on feature phones
 
 ---
 
@@ -74,6 +145,57 @@ Traditional credit models exclude smallholder farmers — especially women, yout
 ```
 
 Data flows through a single Neo4j graph. Farmer actions via USSD create or update nodes. Officer decisions write audit edges and SMS notification nodes. Climate zone updates cascade risk to all connected farmers automatically.
+
+---
+
+## AFRACA — Challenge Partner
+
+### About AFRACA
+
+The **African Rural and Agricultural Credit Association (AFRACA)** is the organization behind our challenge brief. Established in **1977 by the FAO**, AFRACA is a pan-African network of **100+ financial institutions** including:
+
+- **Central banks** (e.g., Reserve Bank of Zimbabwe, Central Bank of Kenya)
+- **Agricultural development banks**
+- **Commercial banks** with rural portfolios
+- **Microfinance institutions**
+- **Rural finance organizations**
+
+**Headquarters:** Nairobi, Kenya
+**Member countries:** 30 across Africa
+**Secretariat:** Pan-African operating across all member countries
+
+**Mission:** Improve the rural finance environment through promotion of appropriate policy frameworks, and support member institutions in providing financial services to smallholder farmers and AgriSMEs.
+
+**Key programs:**
+- **DIG4RAF** — Digitizing Rural and Agricultural Finance
+- **African Agricultural Risk Sharing Mechanism Platform**
+- Value chain finance training, policy advocacy, capacity building
+
+### The Invisible Farmer — Challenge Brief
+
+**Brief title:** "The Invisible Farmer: Graph AI Credit Scoring at Africa's Last Mile"
+
+**Evidence:** Research-based
+
+**The problem AFRACA identified:** Smallholder farmers are often excluded from formal credit because traditional risk assessment systems cannot see their true creditworthiness. Loan officers in capital cities lack access to mobile money consistency, cooperative repayment records, peer lending behavior, digital input purchase histories, seasonal income patterns, or localized pest/drought exposure. Without this context, farmers are treated as too risky or invisible.
+
+**What AFRACA wants the prototype to achieve:**
+1. Connect alternative farmer data, climate/pest risk, cooperative networks, and repayment behavior into a credit score
+2. Serve rural loan officers who need a fast, practical way to assess farmer risk beyond traditional collateral
+3. Give farmers a fairer pathway into formal credit that recognizes real repayment signals and farming context
+4. Support decision-making in rural branches, usable even from a basic phone
+
+**Resources AFRACA provided:**
+- Alternative Data Credit Scoring (FAO)
+- CGAP Credit Scoring for Smallholders
+- World Bank alternative data in credit risk assessment
+- Climate-Credit Scoring in East Africa
+- Mobile Technologies and Finance for Women in Agriculture (World Bank)
+- Neo4j Graph Data Modeling + Graph Data Science
+- Open-Meteo API (weather/climate risk)
+- ICPAC open data sources (rainfall, drought)
+- Kenya Digital Credit Provider Regulations (Central Bank of Kenya)
+- ODPC Guidance for Digital Credit Providers (data privacy)
 
 ---
 
@@ -659,6 +781,50 @@ Thresholds:
 13. **.env.example and setup-env.sh** added
 14. **Notification bell + forgot password** wired with toasts
 15. **Build verified** — zero errors
+
+---
+
+## Challenge Brief Resources
+
+The AFRACA challenge brief provided the following key resources that informed our design and implementation:
+
+### Core Scoring & Alternative Data
+| Resource | Use | Link |
+|----------|-----|------|
+| FAO Alternative Data Credit Scoring | Understand how non-traditional farmer data can support credit scoring | https://sti-portal.fao.org/classes/alternative-data-credit-scoring-platforms-smallholder-farmers |
+| CGAP Credit Scoring for Smallholders | Lessons on smallholder credit scoring and repayment-risk signals | https://www.cgap.org/blog/5-insights-credit-scoring-for-smallholders |
+| Digital Credit Scoring in Agriculture Guide | Build scoring logic using digital farm, financial, and transaction data | https://www.rfilc.org/wp-content/uploads/2020/12/GA_Digital-Scoring-Guide_Double.pdf |
+| World Bank Alternative Data in Credit Risk Assessment | Alternative data sources and responsible credit assessment | https://documents1.worldbank.org/curated/en/099031325132018527/pdf/P179614-3e01b947-cbae-41e4-85dd-2905b6187932.pdf |
+| World Bank Digital Credit for Smallholder Farmers | Field lessons on digital farmer lending and repayment | https://documents1.worldbank.org/curated/en/394511624511863146/pdf/Digital-Credit-for-Smallholder-Farmers-Lessons-Learned-from-the-Field.pdf |
+| Access to Finance for Smallholder Farmers | What lenders need to assess farm cash flows and credit risk | https://documents1.worldbank.org/curated/en/965771468272366367/pdf/949050WP0Box3800English0Publication.pdf |
+| AFI Alternative Data for Credit Scoring | Safeguards around alternative data, consumer protection, fairness | https://www.afi-global.org/wp-content/uploads/2025/02/Alternative-Data-for-Credit-Scoring.pdf |
+| Climate-Credit Scoring in East Africa | Connect farmer credit risk with climate exposure and drought risk | https://cgspace.cgiar.org/bitstreams/ab069548-dacf-45e1-9469-f738d772dbec/download |
+
+### Gender & Inclusion
+| Resource | Use | Link |
+|----------|-----|------|
+| Mobile Technologies and Finance for Women in Agriculture | Design credit scoring that does not exclude women farmers | https://documents1.worldbank.org/curated/en/855471513670397514/pdf/Mobile-technologies-and-digitized-data-to-promote-access-to-finance-for-women-in-agriculture.pdf |
+
+### Technology & Graph Tools
+| Resource | Use | Link |
+|----------|-----|------|
+| Neo4j Graph Data Modeling | Model farmers, cooperatives, loan officers, repayment, climate risk as connected data | https://neo4j.com/docs/getting-started/data-modeling/ |
+| Neo4j Graph Data Science | Graph algorithms, node classification, link prediction for credit-risk | https://neo4j.com/docs/graph-data-science/current/ |
+| Open-Meteo API | Simple weather and climate-risk signals | https://open-meteo.com/ |
+| ICPAC Open Data Sources | Rainfall, drought, seasonal climate datasets for East Africa | https://www.icpac.net/open-data-sources/ |
+
+### Regulatory & Compliance
+| Resource | Use | Link |
+|----------|-----|------|
+| Kenya Digital Credit Provider Regulations | Kenyan digital lending oversight | https://www.centralbank.go.ke/2022/03/21/central-bank-of-kenya-digital-credit-providers-regulations-2022/ |
+| ODPC Guidance for Digital Credit Providers | Privacy-aware flows for farmer data collection, consent, profiling | https://www.odpc.go.ke/wp-content/uploads/2024/02/ODPC-Guidance-Note-for-Digital-Credit-Providers.pdf |
+
+### AFRACA-Specific
+| Resource | Use | Link |
+|----------|-----|------|
+| AFRACA Official Website | Mandate, members, African role | https://afraca.org/ |
+| AFRACA DIG4RAF Program | Digital rural and agricultural finance training | https://recovery.afraca.org/digitizing-rural-agricultural-finance-dig4raf-in-africa-2022/ |
+| AFRACA Value Chain Finance Report | Agricultural value chain finance and lending models | https://www.rfilc.org/wp-content/uploads/2020/08/1252672305521_Microsoft_Word___Africa_agricultural_Val-2019272682.pdf |
 
 ---
 
