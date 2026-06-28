@@ -95,7 +95,7 @@ kaliapp/
 ```
  [FARMER: USSD/SMS]              [NEO4J GRAPH]              [OFFICER: WEB APP]
         │                              │                            │
- 1. Dial *483*100#                     │                     1. Open /dashboard
+ 1. Dial *384*11400#                     │                     1. Open /dashboard
  2. Register / request credit ────────►│◄──────────────────── 2. Search queue
         │                    Farmer nodes                        │
         │                    Chama / Coop / Zone                 ▼
@@ -218,7 +218,7 @@ Authenticate → Monitor queue → Search by ID → Open scorecard
 ### Farmer flow
 
 ```
-Dial *483*100# → Navigate menu → Enter coop code & acreage
+Dial *384*11400# → Navigate menu → Enter coop code & acreage
     → Session ends → SMS breakdown received
 ```
 
